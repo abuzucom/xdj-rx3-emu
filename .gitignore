@@ -1,0 +1,15 @@
+# never commit Pioneer firmware, keys or anything extracted from them
+*.zip
+*.bin
+*.img
+*.raw
+*.key
+rootfs/
+rx3-handoff/
+extracted/
+deb/
+tc-armel/
+proot
+__pycache__/
+*.log
+*.pyc
