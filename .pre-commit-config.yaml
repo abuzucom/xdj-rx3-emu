@@ -1,0 +1,19 @@
+# Ruff hooks from the abuzucom/rough baseline.
+# `rev` is the commit of the tag for the Ruff version pinned in requirements-ruff.txt, since a tag can
+# move. Find it with: git ls-remote https://github.com/astral-sh/ruff-pre-commit v<version>
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: a56c0b927e6465d37cae3e97d35d4d18ab2b96cd  # frozen: v0.16.9
+    hooks:
+      # Block tier: fails the commit. Safe fixes are applied automatically.
+      # --config ruff.toml stops a nested ruff.toml, .ruff.toml or pyproject.toml from replacing the baseline.
+      # --ignore-noqa stops suppression comments from hiding a finding.
+      - id: ruff-check
+        args: [--fix, --config, ruff.toml, --ignore-noqa]
+      - id: ruff-format
+        args: [--config, ruff.toml]
+      # Warn tier: shows findings but never fails the commit.
+      - id: ruff-check
+        name: ruff-check (warn tier)
+        args: [--config, ruff.warn.toml, --ignore-noqa, --exit-zero]
+        verbose: true

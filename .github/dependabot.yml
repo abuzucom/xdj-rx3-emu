@@ -1,0 +1,29 @@
+---
+# Weekly update PRs for SHA-pinned actions and hash-pinned Python tools.
+# Dependabot opens PRs only. A human reviews and merges each one (AGENTS.md Rule 9).
+# master mirrors upstream, so updates target main.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: main
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+    groups:
+      actions:
+        patterns:
+          - "*"
+
+  - package-ecosystem: pip
+    directory: /
+    target-branch: main
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+    groups:
+      python-tools:
+        patterns:
+          - "*"

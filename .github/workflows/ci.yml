@@ -1,0 +1,44 @@
+name: ci
+
+# Pull request checks for main. The security-review and quality-review
+# callers run after this workflow completes.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  ruff:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned Ruff
+        run: python -m pip install --require-hashes -r requirements-ruff.txt
+
+      # Ruff would let a nearer ruff.toml, .ruff.toml or pyproject.toml replace the baseline; reject any.
+      - name: No Ruff config besides ruff.toml
+        run: python scripts/check_ruff_configs.py
+
+      # --ignore-noqa makes suppression comments ineffective.
+      # --no-respect-gitignore lints files .gitignore lists, even tracked ones.
+      - name: Lint (block tier)
+        run: ruff check --config ruff.toml --ignore-noqa --no-respect-gitignore
+
+      - name: Format check
+        run: ruff format --config ruff.toml --check
+
+      - name: Warn-tier report (never fails)
+        run: ruff check --config ruff.warn.toml --ignore-noqa --exit-zero
