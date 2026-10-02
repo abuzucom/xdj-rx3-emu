@@ -2,9 +2,12 @@
 """Add virtual USB stick handling to rx3_bridge.py:
   0x32 "insert usbN <host path>"  -> populate ~/rx3/usbN with links to the folder's audio files, then connect+mount
   0x32 "eject usbN"               -> umount+disconnect, clear the folder
-Windows paths (C:\\Users\\...) are translated to /mnt/c/Users/... (WSL drvfs)."""
+Windows paths (C:\\Users\\...) are translated to /mnt/c/Users/... (WSL drvfs).
+"""
+
 import pathlib
-p = pathlib.Path(__file__).with_name('rx3_bridge.py')
+
+p = pathlib.Path(__file__).with_name("rx3_bridge.py")
 s = p.read_text()
 old = """                elif typ == 0x32:
                     line = payload.decode(errors='replace').strip()
@@ -110,8 +113,8 @@ def usb_stick(root, action, slot, folder, client):
     fifo('udev_usb' + n, 'mount ' + path)
     client.status('usb%s inserted: %d audio files from %s' % (n, count, src))
 '''
-anchor = '\n\ndef serve(port, root, client):'
+anchor = "\n\ndef serve(port, root, client):"
 assert anchor in s
 s = s.replace(anchor, helper + anchor, 1)
 p.write_text(s)
-print('bridge usb patch applied')
+print("bridge usb patch applied")
