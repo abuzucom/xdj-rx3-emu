@@ -3,9 +3,9 @@ name: ci
 # Pull request checks for main. The security-review and quality-review
 # callers run after this workflow completes.
 
+# pull_request has no branch filter so stacked PRs get checks too.
 on:
   pull_request:
-    branches: [main]
   push:
     branches: [main]
 
