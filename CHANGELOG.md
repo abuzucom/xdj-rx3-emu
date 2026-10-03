@@ -16,11 +16,13 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Support for AlphaTheta firmware package `XDJRX31110exe.zip` and executable payloads.
 - CLI flags `--firmware-dir`, `--url`, `--expected-hash`, and `--download`.
 - `.github/workflows/smoketest.yml` runs automated smoke tests in CI with firmware caching.
+- `.github/workflows/seed-firmware-cache.yml` adds manual dispatch to seed workflow storage cache.
 - `tests/test_smoke_test.py` covers archive discovery, size assertions, wire framing,
   hash calculation, and download validation.
 - Tracking of `firmware/firmware.sha256` while ignoring firmware binaries in `.gitignore`.
 
 ### Fixed
+- Removed auto-download from CI in `.github/workflows/smoketest.yml` and required workflow storage cache.
 - Enclosed test and client sockets in context managers to guarantee resource release.
 - Added path traversal, symlink, and decompression size limit validation on archives.
 - Bound client and server protocol frame sizes to 1 MiB in `scripts/smoke_test.py`.
