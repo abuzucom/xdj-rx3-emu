@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 # Fresh boot, wait for the control adapter, then: insert stick, play track A, measure pitch; swap stick; eject.
 cd ~/rx3
-tr -d '\r' < /mnt/d/games/rx3-bridge/rx3_bridge.py > rx3_bridge.py
+BRIDGE_SRC="${RX3_BRIDGE_SRC:-./rx3_bridge.py}"
+if [ -f "$BRIDGE_SRC" ] && [ "$BRIDGE_SRC" != "rx3_bridge.py" ]; then
+  tr -d '\r' < "$BRIDGE_SRC" > rx3_bridge.py
+fi
 pkill -f rx3_bridge.py; pkill -f 'rbp-pi -a'; sleep 1
 (RX3_TIMEOUT=600 ./run-rx3.sh > bridge.log 2>&1 &)
 for i in $(seq 1 120); do grep -q 'RX3 control adapter ready' player.log 2>/dev/null && break; sleep 2; done
 grep -q 'RX3 control adapter ready' player.log && echo "control adapter ready after ~$((i*2)) s" || { echo "control adapter never ready"; exit 1; }
 sleep 3
 python3 - <<'PY'
-import socket, struct, time
+import os, socket, struct, time
 from PIL import Image
 s = socket.create_connection(('127.0.0.1', 4480), timeout=30)
 def rd(n):
@@ -33,7 +36,9 @@ def pump(sec):
             for r in range(h):
                 o=((y+r)*1280+x)*4; frame[o:o+w*4]=p[8+r*w*4:8+(r+1)*w*4]
         elif t==0x01: print('STATUS',p.decode(errors='replace'))
-def shot(n): Image.frombuffer('RGBA',(1280,800),bytes(frame),'raw','RGBA',0,1).convert('RGB').save('/mnt/d/games/rx3-bridge/f_%s.png'%n)
+def shot(n):
+    out = os.environ.get('RX3_SHOT_DIR', '.')
+    Image.frombuffer('RGBA',(1280,800),bytes(frame),'raw','RGBA',0,1).convert('RGB').save(os.path.join(out, f'f_{n}.png'))
 base=os.environ.get('RX3_USB_ROOT', '/mnt/c/rx3_usb').encode()   # folder holding the virtual USB stick folders
 send(0x21,b''); pump(3)
 send(0x32, b'insert usb1 ' + base + br'\USB'); pump(8)

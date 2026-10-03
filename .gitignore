@@ -1,4 +1,5 @@
 # never commit Pioneer firmware, keys or anything extracted from them
+firmware/
 *.zip
 *.bin
 *.img

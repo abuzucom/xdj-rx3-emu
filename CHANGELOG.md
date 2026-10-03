@@ -6,6 +6,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 One deviation applies. A version heading parenthesizes the release date.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] (2026-10-03)
+
+### Added
+- `scripts/smoke_test.py` validates firmware zip archives, simulates the bridge
+  protocol via a mock TCP server, and verifies client handshakes.
+- `.github/workflows/smoketest.yml` runs automated smoke tests in CI.
+- `tests/test_smoke_test.py` covers archive discovery, size assertions, and
+  wire framing.
+- `firmware/` untracked directory in `.gitignore`.
+
+### Fixed
+- `wsl/test-e2e.sh` imports `os` and parameterizes bridge and screenshot paths.
+- `wsl/measure-pitch.py` guards divisions against zero on silent audio buffers.
+
 ## [0.2.1] (2026-10-03)
 
 ### Added
