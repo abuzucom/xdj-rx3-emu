@@ -1,0 +1,29 @@
+.git/
+*.log
+.env*
+!.env.example
+__pycache__/
+.ruff_cache/
+.venv/
+
+# Firmware and extracted trees never live in the repository
+*.zip
+*.bin
+*.img
+*.raw
+*.key
+rootfs/
+rx3-handoff/
+extracted/
+deb/
+tc-armel/
+proot
+
+# Ignore duplicate rule copies for other tools
+.cursorrules
+.clinerules
+.windsurfrules
+.copilot-instructions
+.github/copilot-instructions.md
+GEMINI.md
+CONVENTIONS.md

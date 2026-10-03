@@ -5,6 +5,51 @@
 
 line-length = 120
 target-version = "py311"
+# Template copies from abuzucom/agents and abuzucom/foucault stay byte-identical with
+# their source (shared-files.json), so the baseline does not lint them.
+extend-exclude = [
+  "ci",
+  "hooks",
+  "tests",
+  "tools",
+  "scripts/check_action_pins.py",
+  "scripts/check_agent_prose_gate.py",
+  "scripts/check_ascii.py",
+  "scripts/check_banned_agents.py",
+  "scripts/check_branch_name.py",
+  "scripts/check_changelog.py",
+  "scripts/check_commit_attribution.py",
+  "scripts/check_commit_message.py",
+  "scripts/check_compliance_tree.py",
+  "scripts/check_conflict_markers.py",
+  "scripts/check_dockerfile_root.py",
+  "scripts/check_english_only.py",
+  "scripts/check_external_pr_refs.py",
+  "scripts/check_gate_adoption.py",
+  "scripts/check_gate_pr_integrity.py",
+  "scripts/check_git_identity.py",
+  "scripts/check_hedging.py",
+  "scripts/check_hook_coverage.py",
+  "scripts/check_hook_launchers.py",
+  "scripts/check_persist_credentials.py",
+  "scripts/check_policy_size.py",
+  "scripts/check_pr_review_response.py",
+  "scripts/check_pull_request_message.py",
+  "scripts/check_secrets_heuristic.py",
+  "scripts/check_test_first.py",
+  "scripts/check_us_spelling.py",
+  "scripts/check_weak_hashing.py",
+  "scripts/complete_gate_adoption.py",
+  "scripts/handoff_policy.py",
+  "scripts/lint_style.py",
+  "scripts/prose_policy.py",
+  "scripts/read_git_state.py",
+  "scripts/run_tests.py",
+  "scripts/sync.py",
+  "scripts/trusted_bot_identities.py",
+  "scripts/trusted_gh.py",
+  "scripts/trusted_git.py",
+]
 preview = true
 
 [lint]
