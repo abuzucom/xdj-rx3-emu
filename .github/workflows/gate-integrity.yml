@@ -1,0 +1,104 @@
+name: Gate Integrity
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  checks: read
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  protected-gate-changes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: ${{ github.event.pull_request.base.repo.full_name }}
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: trusted-base
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: pr-head
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.x'
+      # The approval binds to the head only through GitHub-recorded times:
+      # label events, force pushes, and check-suite creation for the head SHA.
+      - name: Read approval timeline
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        with:
+          script: |
+            const fs = require("fs");
+            const path = require("path");
+            const pullRequest = context.payload.pull_request;
+            const headSha = pullRequest?.head?.sha;
+            if (!/^[0-9a-f]{40}$/.test(headSha || "")) {
+              core.setFailed("pull request head SHA is invalid");
+              return;
+            }
+            const timeline = await github.paginate(
+              github.rest.issues.listEventsForTimeline,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pullRequest.number,
+                per_page: 100,
+              },
+            );
+            const relevant = new Set(["labeled", "unlabeled", "head_ref_force_pushed"]);
+            const events = timeline
+              .filter((event) => relevant.has(event.event))
+              .map((event) => ({
+                event: event.event,
+                created_at: event.created_at,
+                label: event.label?.name ?? null,
+                actor_type: event.actor?.type ?? "",
+              }));
+            const suites = await github.paginate(
+              github.rest.checks.listSuitesForRef,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: headSha,
+                per_page: 100,
+              },
+            );
+            const document = {
+              events,
+              head_suite_times: suites.map((suite) => suite.created_at),
+            };
+            fs.writeFileSync(
+              path.join(process.env.RUNNER_TEMP, "gate-timeline.json"),
+              JSON.stringify(document),
+            );
+      - name: Verify protected gate changes
+        working-directory: trusted-base
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_LABELS_JSON: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          GIT_ALTERNATE_OBJECT_DIRECTORIES: ${{ github.workspace }}/pr-head/.git/objects
+        # Pull-request code never runs here. Without a base checker, the first
+        # adoption passes only with the approval label.
+        run: |
+          if [ -f scripts/check_gate_pr_integrity.py ]; then
+            set -- --base "$PR_BASE_SHA" --head "$PR_HEAD_SHA" --pr-number "$PR_NUMBER" --labels-json "$PR_LABELS_JSON"
+            if grep -q -- '--timeline-json' scripts/check_gate_pr_integrity.py; then
+              set -- "$@" --timeline-json "$RUNNER_TEMP/gate-timeline.json"
+            fi
+            python scripts/check_gate_pr_integrity.py "$@"
+          else
+            python -c 'import json, os, sys; sys.exit(0 if "gate-change-approved" in json.loads(os.environ["PR_LABELS_JSON"]) else "first gate adoption requires the gate-change-approved label")'
+          fi

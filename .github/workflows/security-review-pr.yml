@@ -1,0 +1,128 @@
+name: security-review-pr
+
+on:
+  workflow_run:
+    workflows: [Immutable Compliance]
+    types: [completed]
+
+concurrency:
+  group: security-review-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: true
+
+permissions:
+  checks: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  resolve-pr:
+    runs-on: ubuntu-latest
+    outputs:
+      same_repository: ${{ steps.resolve.outputs.same_repository }}
+      already_reviewed: ${{ steps.resolve.outputs.already_reviewed }}
+      pr_number: ${{ steps.resolve.outputs.pr_number }}
+      base_sha: ${{ steps.resolve.outputs.base_sha }}
+      head_sha: ${{ steps.resolve.outputs.head_sha }}
+      head_repo_url: ${{ steps.resolve.outputs.head_repo_url }}
+      head_repo_full_name: ${{ steps.resolve.outputs.head_repo_full_name }}
+    steps:
+      - name: Resolve pull request from workflow run head
+        id: resolve
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        with:
+          script: |
+            const workflowRun = context.payload.workflow_run;
+            const headSha = workflowRun?.head_sha;
+            if (!/^[0-9a-f]{40}$/.test(headSha || "")) {
+              core.setFailed("workflow run head SHA is invalid");
+              return;
+            }
+
+            const pullRequests = await github.paginate(
+              github.rest.repos.listPullRequestsAssociatedWithCommit,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                commit_sha: headSha,
+                per_page: 100,
+              },
+            );
+            const baseRepository = `${context.repo.owner}/${context.repo.repo}`;
+            const candidates = pullRequests.filter((pullRequest) =>
+              pullRequest.base?.repo?.full_name?.toLowerCase() ===
+              baseRepository.toLowerCase() &&
+              pullRequest.head?.sha?.toLowerCase() === headSha.toLowerCase()
+            );
+            if (candidates.length !== 1) {
+              core.setFailed(
+                `expected one pull request for workflow run head, found ${candidates.length}`,
+              );
+              return;
+            }
+
+            const pullRequest = candidates[0];
+            const headRepository = pullRequest.head?.repo;
+            if (!headRepository?.full_name || !headRepository.clone_url) {
+              core.setFailed("pull request head repository metadata is unavailable");
+              return;
+            }
+
+            // One model call per head revision. A completed check run carrying
+            // a verdict means this head was already reviewed. A failed run
+            // carries no verdict, so a flaky review still retries.
+            const checkRuns = await github.paginate(
+              github.rest.checks.listForRef,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: headSha,
+                check_name: "security-review",
+                per_page: 100,
+              },
+            );
+            const alreadyReviewed = checkRuns.some((run) =>
+              run.status === "completed" &&
+              /VERDICT: (APPROVE|BLOCK|NEEDS-HUMAN)\b/.test(
+                run.output?.summary || ""
+              )
+            );
+            core.setOutput("already_reviewed", alreadyReviewed ? "true" : "false");
+            core.setOutput(
+              "same_repository",
+              headRepository.full_name.toLowerCase() === baseRepository.toLowerCase()
+                ? "true"
+                : "false",
+            );
+            core.setOutput("pr_number", String(pullRequest.number));
+            core.setOutput("base_sha", pullRequest.base.sha);
+            core.setOutput("head_sha", pullRequest.head.sha);
+            core.setOutput("head_repo_url", headRepository.clone_url);
+            core.setOutput("head_repo_full_name", headRepository.full_name);
+
+  review:
+    needs: resolve-pr
+    if: needs.resolve-pr.result == 'success' && needs.resolve-pr.outputs.same_repository == 'true' && needs.resolve-pr.outputs.already_reviewed != 'true'
+    uses: abuzucom/foucault/.github/workflows/security-review.yml@62851df1ef177593adbb9e06b223f5a6dce66fc0
+    with:
+      # Foucault 3.3.10 policy revision.
+      audit_ref: "62851df1ef177593adbb9e06b223f5a6dce66fc0"
+      model_call_command: "python3 ci/call_model.py"
+      pr_comment: true
+      fail_on_block: true
+      pr_number: ${{ needs.resolve-pr.outputs.pr_number }}
+      base_sha: ${{ needs.resolve-pr.outputs.base_sha }}
+      head_sha: ${{ needs.resolve-pr.outputs.head_sha }}
+      head_repo_url: ${{ needs.resolve-pr.outputs.head_repo_url }}
+      head_repo_full_name: ${{ needs.resolve-pr.outputs.head_repo_full_name }}
+    secrets:
+      MODEL_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
+
+  fork-review-skipped:
+    needs: resolve-pr
+    if: needs.resolve-pr.result == 'success' && needs.resolve-pr.outputs.same_repository == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Explain skipped review
+        run: >-
+          echo "Model review skipped for a fork pull request because provider
+          secrets are not available to this job."
