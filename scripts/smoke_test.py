@@ -154,61 +154,63 @@ class MockBridgeServer:
 
 
 def connect_bridge_socket(host: str, port: int, timeout: float) -> socket.socket | None:
-    """Connect to bridge with retry loop until timeout expires.
-
-    Ensures any socket descriptor created during a failed attempt is cleanly closed.
-    """
+    """Connect to bridge with retry loop until timeout expires."""
     start_time = time.time()
     while time.time() - start_time < timeout:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(2.0)
         try:
-            sock.connect((host, port))
-            return sock
+            return socket.create_connection((host, port), timeout=2.0)
         except OSError:
-            sock.close()
             time.sleep(0.5)
     return None
 
 
+def _handle_handshake(sock: socket.socket, start_time: float, timeout: float) -> bool:
+    """Read handshake frames from socket until status and screen info are verified."""
+    received_status = False
+    received_screen = False
+
+    while time.time() - start_time < timeout:
+        try:
+            frame = read_frame(sock)
+            if frame is None:
+                break
+            msg_type, payload = frame
+
+            if msg_type == 0x01:
+                print(f"Received status frame (0x01): {payload.decode(errors='replace')}")
+                received_status = True
+            elif msg_type == 0x10:
+                dims = struct.unpack("<HH", payload[:4])
+                print(f"Received screen info (0x10): {dims[0]}x{dims[1]}")
+                if dims == (SCREEN_WIDTH, SCREEN_HEIGHT):
+                    received_screen = True
+                write_frame(sock, 0x21, b"")
+
+            if received_status and received_screen:
+                print("Smoke test protocol verification successful.")
+                return True
+        except socket.timeout:
+            continue
+        except OSError as err:
+            print(f"Socket error during smoke test: {err}", file=sys.stderr)
+            break
+
+    return False
+
+
 def test_bridge_client(host: str = "127.0.0.1", port: int = DEFAULT_PORT, timeout: float = 10.0) -> bool:
     """Connect to bridge and assert protocol handshake frames."""
-    sock = connect_bridge_socket(host, port, timeout)
-    if sock is None:
-        print(f"Failed to connect to bridge at {host}:{port} within {timeout}s", file=sys.stderr)
-        return False
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.settimeout(2.0)
+                sock.connect((host, port))
+                return _handle_handshake(sock, start_time, timeout)
+        except OSError:
+            time.sleep(0.5)
 
-    with sock:
-        start_time = time.time()
-        received_status = False
-        received_screen = False
-
-        while time.time() - start_time < timeout:
-            try:
-                frame = read_frame(sock)
-                if frame is None:
-                    break
-                msg_type, payload = frame
-
-                if msg_type == 0x01:
-                    print(f"Received status frame (0x01): {payload.decode(errors='replace')}")
-                    received_status = True
-                elif msg_type == 0x10:
-                    dims = struct.unpack("<HH", payload[:4])
-                    print(f"Received screen info (0x10): {dims[0]}x{dims[1]}")
-                    if dims == (SCREEN_WIDTH, SCREEN_HEIGHT):
-                        received_screen = True
-                    write_frame(sock, 0x21, b"")
-
-                if received_status and received_screen:
-                    print("Smoke test protocol verification successful.")
-                    return True
-            except socket.timeout:
-                continue
-            except OSError as err:
-                print(f"Socket error during smoke test: {err}", file=sys.stderr)
-                break
-
+    print(f"Failed to connect to bridge at {host}:{port} within {timeout}s", file=sys.stderr)
     return False
 
 

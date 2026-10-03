@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 One deviation applies. A version heading parenthesizes the release date.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] (2026-10-03)
+
+### Fixed
+- Enclosed test and client sockets in context managers to guarantee resource release.
+- Updated `connect_bridge_socket` to use `socket.create_connection` to avoid unmanaged socket allocations.
+
 ## [0.3.1] (2026-10-03)
 
 ### Fixed
