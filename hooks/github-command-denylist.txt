@@ -1,0 +1,45 @@
+# GitHub CLI command paths denied to agents.
+# A family entry blocks the command and every descendant.
+family agent-task
+family agent
+family agents
+family agent-tasks
+family cs
+family alias
+family config
+family codespace
+family completion
+family copilot
+family extension
+family ext
+family extensions
+family gpg-key
+family label
+family preview
+family release
+family secret
+family skill
+family skills
+family ssh-key
+family variable
+path auth login
+path auth logout
+path auth refresh
+path auth setup-git
+path auth switch
+path auth token
+path pr lock
+path pr merge
+path pr ready
+path pr revert
+path pr unlock
+path repo archive
+path repo clone
+path repo create
+path repo delete
+path repo deploy-key
+path repo fork
+path repo rename
+path repo unarchive
+path run cancel
+path run delete

@@ -1,0 +1,4 @@
+project_doc_max_bytes = 131072
+
+[features]
+hooks = true
