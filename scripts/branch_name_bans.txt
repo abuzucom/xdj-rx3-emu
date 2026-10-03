@@ -1,0 +1,14 @@
+# Exact branch-name tokens that are vulgar or unsuitable.
+ass
+bastard
+bitch
+crap
+damn
+dick
+fuck
+piss
+porn
+sex
+shit
+slut
+whore

@@ -1,0 +1,17 @@
+[global]
+worth noting
+worst
+serious
+testament
+serves as
+stands as
+functions as
+utilize
+
+[handoff-exempt]
+this session
+a round
+could not carry
+denied outright
+Denied:
+the user

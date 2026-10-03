@@ -1,7 +1,105 @@
-# Ruff hooks from the abuzucom/rough baseline.
-# `rev` is the commit of the tag for the Ruff version pinned in requirements-ruff.txt, since a tag can
-# move. Find it with: git ls-remote https://github.com/astral-sh/ruff-pre-commit v<version>
 repos:
+  - repo: local
+    hooks:
+      - id: check-changelog
+        name: Check versioned changelog (SemVer)
+        entry: python scripts/check_changelog.py --staged
+        language: python
+        pass_filenames: false
+        always_run: true
+      - id: check-test-first
+        name: Check test-first executable changes
+        entry: python scripts/check_test_first.py
+        language: python
+        pass_filenames: false
+        always_run: true
+      - id: check-policy-size
+        name: Check canonical policy size
+        entry: python scripts/check_policy_size.py
+        language: python
+        pass_filenames: false
+        always_run: true
+      - id: convention-sync-check
+        name: Convention Sync Check
+        entry: python scripts/sync.py --check
+        language: python
+        files: ^(AGENTS\.md|CLAUDE\.md|GEMINI\.md|CONVENTIONS\.md|\.cursorrules|\.clinerules|\.windsurfrules|\.github/copilot-instructions\.md|\.copilot-instructions|scripts/sync\.py)$
+        pass_filenames: false
+      - id: check-gate-adoption
+        name: Check gate adoption (Rule 18)
+        entry: python scripts/check_gate_adoption.py
+        language: python
+        pass_filenames: false
+        always_run: true
+      - id: check-persist-credentials
+        name: Check persist-credentials on checkout steps (Rule 11)
+        entry: python scripts/check_persist_credentials.py
+        language: python
+        additional_dependencies: [PyYAML==6.0.3]
+        files: ^\.github/workflows/.*\.ya?ml$
+      - id: check-weak-hashing
+        name: Check for unjustified MD5/SHA-1 (Rule 7)
+        entry: python scripts/check_weak_hashing.py
+        language: python
+        files: ^scripts/.*\.py$
+      - id: check-dockerfile-root
+        name: Check for non-root containers (Rule 12)
+        entry: python scripts/check_dockerfile_root.py
+        language: python
+        additional_dependencies: [PyYAML==6.0.3]
+        files: ^(Dockerfile.*|docker-compose.*\.ya?ml|compose.*\.ya?ml)$
+      - id: check-secrets-heuristic
+        name: Check for likely secrets (Rule 8)
+        entry: python scripts/check_secrets_heuristic.py
+        language: python
+        files: ^(scripts/.*\.py|\.github/workflows/.*\.ya?ml|\.pre-commit-config\.yaml|Makefile)$
+      - id: check-conflict-markers
+        name: Check for unresolved conflict markers
+        entry: python scripts/check_conflict_markers.py --staged
+        language: python
+        pass_filenames: false
+        always_run: true
+      - id: hook-tests
+        name: Parallel policy tests
+        entry: python scripts/run_tests.py
+        language: python
+        additional_dependencies: [PyYAML==6.0.3]
+        files: ^(hooks/.*\.py|tests/.*\.py|\.(claude/settings|codex/hooks|gemini/settings|agents/hooks)\.json|\.codex/config\.toml|\.github/workflows/.*\.ya?ml|scripts/(sync|trusted_gh|trusted_git|read_git_state|run_tests|prose_policy|check_changelog|check_gate_adoption|check_hook_coverage|check_(banned_agents|branch_name|commit_attribution|commit_message|compliance_tree|dockerfile_root|external_pr_refs|git_identity|hedging|persist_credentials|pull_request_message|secrets_heuristic|weak_hashing))\.py|scripts/(prose_bans|banned_models)\.txt)$
+        pass_filenames: false
+      - id: check-git-identity
+        name: Check git identity (Rule 14)
+        entry: python scripts/check_git_identity.py --strict
+        language: python
+        pass_filenames: false
+        always_run: true
+      - id: check-commit-attribution
+        name: Check commit attribution
+        entry: python scripts/check_commit_attribution.py --message-file
+        language: python
+        stages: [commit-msg]
+      - id: check-branch-name
+        name: Check branch name (Branch naming conventions)
+        entry: python scripts/check_branch_name.py
+        language: python
+        pass_filenames: false
+        stages: [pre-push]
+      - id: check-unpushed-identity
+        name: Check unpushed commit identities (Rule 14)
+        entry: python scripts/check_git_identity.py --strict --unpushed
+        language: python
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+      - id: check-unpushed-external-refs
+        name: Check unpushed commits for external references (Rule 17)
+        entry: python scripts/check_external_pr_refs.py --unpushed
+        language: python
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+  # Ruff hooks from the abuzucom/rough baseline.
+  # `rev` is the commit of the tag for the Ruff version pinned in requirements-ruff.txt, since a tag can
+  # move. Find it with: git ls-remote https://github.com/astral-sh/ruff-pre-commit v<version>
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: a56c0b927e6465d37cae3e97d35d4d18ab2b96cd  # frozen: v0.16.9
     hooks:
