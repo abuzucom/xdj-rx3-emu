@@ -1,22 +1,19 @@
 ---
-name: smoketest
+name: seed-firmware-cache
 
-# Automated smoke test for bridge protocol framing, archive handling,
-# and emulation handshake verification.
+# Manually-approved workflow to seed the proprietary firmware archive
+# into GitHub Actions workflow cache storage.
 
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  smoke-test:
+  seed-cache:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -26,16 +23,13 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Restore Firmware from Workflow Storage Cache
+      - name: Cache Firmware Archive
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4.2.0
         id: firmware-cache
         with:
           path: firmware/
           key: firmware-${{ hashFiles('firmware/firmware.sha256') }}
-          fail-on-cache-miss: true
 
-      - name: Run Smoke Test Unit & Protocol Suite
-        run: python -m unittest tests.test_smoke_test
-
-      - name: Run End-to-End Bridge Wire Protocol Smoke Test
-        run: python scripts/smoke_test.py --action e2e --timeout 10.0
+      - name: Download and Verify Firmware
+        if: steps.firmware-cache.outputs.cache-hit != 'true'
+        run: python scripts/smoke_test.py --action prepare --download
