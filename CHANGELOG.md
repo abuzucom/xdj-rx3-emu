@@ -6,43 +6,26 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 One deviation applies. A version heading parenthesizes the release date.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.0] (2026-10-03)
-
-### Added
-- Remote firmware downloading and SHA-256 verification in `scripts/smoke_test.py`.
-- Support for AlphaTheta firmware package `XDJRX31110exe.zip` and executable payloads.
-- CLI flags `--firmware-dir`, `--url`, and `--expected-hash` for flexible firmware acquisition.
-- Unit tests for SHA-256 calculation, remote download validation, and executable payload extraction.
-
-### Fixed
-- Added path traversal and symlink validation on all extracted archive target paths.
-- Added payload length bounds check before unpacking screen info frames in `_handle_handshake`.
-
-## [0.3.2] (2026-10-03)
-
-### Fixed
-- Enclosed test and client sockets in context managers to guarantee resource release.
-- Updated `connect_bridge_socket` to use `socket.create_connection` to avoid unmanaged socket allocations.
-
-## [0.3.1] (2026-10-03)
-
-### Fixed
-- Fixed socket resource leak in `scripts/smoke_test.py` connection retry loop.
-- Bound client and server protocol frame sizes to 1 MiB in `scripts/smoke_test.py`.
-- Extracted shared `read_frame` and `write_frame` wire helpers to remove duplication.
-- Replaced silent socket close exception handling with warning logging in `scripts/smoke_test.py`.
-
 ## [0.3.0] (2026-10-03)
 
 ### Added
 - `scripts/smoke_test.py` validates firmware zip archives, simulates the bridge
   protocol via a mock TCP server, and verifies client handshakes.
-- `.github/workflows/smoketest.yml` runs automated smoke tests in CI.
-- `tests/test_smoke_test.py` covers archive discovery, size assertions, and
-  wire framing.
-- `firmware/` untracked directory in `.gitignore`.
+- Firmware download and SHA-256 integrity verification against
+  `firmware/firmware.sha256` in `scripts/smoke_test.py`.
+- Support for AlphaTheta firmware package `XDJRX31110exe.zip` and executable payloads.
+- CLI flags `--firmware-dir`, `--url`, `--expected-hash`, and `--download`.
+- `.github/workflows/smoketest.yml` runs automated smoke tests in CI with firmware caching.
+- `tests/test_smoke_test.py` covers archive discovery, size assertions, wire framing,
+  hash calculation, and download validation.
+- Tracking of `firmware/firmware.sha256` while ignoring firmware binaries in `.gitignore`.
 
 ### Fixed
+- Enclosed test and client sockets in context managers to guarantee resource release.
+- Added path traversal, symlink, and decompression size limit validation on archives.
+- Bound client and server protocol frame sizes to 1 MiB in `scripts/smoke_test.py`.
+- Added payload length bounds check before unpacking screen info frames in `_handle_handshake`.
+- Added per-read timeout handling to `read_frame`.
 - `wsl/test-e2e.sh` imports `os` and parameterizes bridge and screenshot paths.
 - `wsl/measure-pitch.py` guards divisions against zero on silent audio buffers.
 
