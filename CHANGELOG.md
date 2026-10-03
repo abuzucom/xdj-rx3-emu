@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 One deviation applies. A version heading parenthesizes the release date.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] (2026-10-03)
+
+### Fixed
+- Fixed socket resource leak in `scripts/smoke_test.py` connection retry loop.
+- Bound client and server protocol frame sizes to 1 MiB in `scripts/smoke_test.py`.
+- Extracted shared `read_frame` and `write_frame` wire helpers to remove duplication.
+- Replaced silent socket close exception handling with warning logging in `scripts/smoke_test.py`.
+
 ## [0.3.0] (2026-10-03)
 
 ### Added
