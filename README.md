@@ -74,5 +74,14 @@ queued with a 2 s settle so rapid swaps don't race the firmware.
 
 ## Licence
 
-MIT for everything here. The firmware and Pioneer's GPL source drop are subject to their own licences and
-are not distributed.
+This repository carries a split license.
+
+Files inherited from the upstream fork stay under the MIT license in [`LICENSE`](LICENSE):
+`LICENSE`, `README.md`, `.gitignore`, everything under `wsl/`, and everything under `docs/screenshots/`.
+Later edits to those files keep them under MIT.
+
+Every other file carries the BSD 3-Clause license in [`LICENSE.BSD-3-Clause`](LICENSE.BSD-3-Clause),
+copyright ABUZUCOM LLC. That includes the material copied from `abuzucom/agents`, `abuzucom/rough`,
+`abuzucom/foucault`, and `abuzucom/euler`, which keeps its BSD 3-Clause notice and conditions.
+
+The firmware and Pioneer's GPL source drop are subject to their own licences and are not distributed.
