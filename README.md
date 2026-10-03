@@ -72,6 +72,19 @@ queued with a 2 s settle so rapid swaps don't race the firmware.
   software on the framebuffer file.
 - Jog scaling is approximate (40 ticks per revolution, DDJ-400 style).
 
+## Development
+
+`main` is the primary branch. `master` mirrors upstream and receives no other
+commits. Merge `master` into `main` through a pull request.
+
+See `docs/development.md` for commands, `CONTRIBUTING.md` for conventions, and
+`AGENTS.md` for the agent policy. Pull requests run the Ruff baseline, the
+agent policy checks, and the foucault security review.
+
+Handoffs use `plan/HANDOFF.md.example`. Inspect a handoff only after an
+active-user request. Do not run Git commands before consent. After consent,
+read Git state through `scripts/read_git_state.py`.
+
 ## Licence
 
 This repository carries a split license.

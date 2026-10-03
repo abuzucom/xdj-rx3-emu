@@ -1,0 +1,16 @@
+name: AGENTS.md Compliance
+
+on:
+  push:
+    branches: [ main ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  compliance:
+    uses: ./.github/workflows/agents-compliance.yml
