@@ -12,14 +12,18 @@ from pathlib import Path
 
 from scripts.smoke_test import (
     DEFAULT_PORT,
+    MAX_FRAME_LENGTH,
     MIN_UPD_BYTES,
     SCREEN_HEIGHT,
     SCREEN_WIDTH,
     UPD_FILENAME,
     MockBridgeServer,
+    connect_bridge_socket,
     find_firmware_zip,
     prepare_firmware,
+    read_frame,
     test_bridge_client,
+    write_frame,
 )
 
 
@@ -37,6 +41,46 @@ class SmokeTestBridgeProtocolTest(unittest.TestCase):
             self.assertTrue(success, "Bridge client failed to complete handshake")
         finally:
             server.stop()
+
+    def test_frame_roundtrip(self) -> None:
+        """Verify read_frame and write_frame roundtrip across a socket pair."""
+        server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server_sock.bind(("127.0.0.1", 0))
+        server_sock.listen(1)
+        port = server_sock.getsockname()[1]
+
+        client_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client_sock.connect(("127.0.0.1", port))
+        conn, _ = server_sock.accept()
+
+        with server_sock, client_sock, conn:
+            payload = b"protocol payload data"
+            write_frame(client_sock, 0x05, payload)
+            result = read_frame(conn)
+            self.assertIsNotNone(result)
+            self.assertEqual(result, (0x05, payload))
+
+    def test_read_frame_exceeds_max_length(self) -> None:
+        """Verify read_frame rejects frames larger than max_length."""
+        server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server_sock.bind(("127.0.0.1", 0))
+        server_sock.listen(1)
+        port = server_sock.getsockname()[1]
+
+        client_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client_sock.connect(("127.0.0.1", port))
+        conn, _ = server_sock.accept()
+
+        with server_sock, client_sock, conn:
+            oversized_len = MAX_FRAME_LENGTH + 1
+            client_sock.sendall(struct.pack("<BI", 0x01, oversized_len))
+            result = read_frame(conn)
+            self.assertIsNone(result)
+
+    def test_connect_bridge_socket_failure_cleanup(self) -> None:
+        """Verify connect_bridge_socket returns None cleanly without leaking sockets."""
+        sock = connect_bridge_socket("127.0.0.1", port=1, timeout=0.1)
+        self.assertIsNone(sock)
 
     def test_find_firmware_zip(self) -> None:
         """Verify zip archive discovery in directory."""

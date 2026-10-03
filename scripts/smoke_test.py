@@ -8,6 +8,7 @@ and client handshake validation for local and CI environments.
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import socket
 import struct
@@ -22,6 +23,40 @@ SCREEN_WIDTH = 1280
 SCREEN_HEIGHT = 800
 UPD_FILENAME = "XDJRX3.UPD"
 MIN_UPD_BYTES = 50_000_000
+MAX_FRAME_LENGTH = 1_048_576
+
+
+def write_frame(sock: socket.socket, msg_type: int, payload: bytes) -> None:
+    """Send wire frame [type u8][len u32 LE][payload]."""
+    hdr = struct.pack("<BI", msg_type, len(payload))
+    sock.sendall(hdr + payload)
+
+
+def read_frame(sock: socket.socket, max_length: int = MAX_FRAME_LENGTH) -> tuple[int, bytes] | None:
+    """Read a wire frame [type u8][len u32 LE][payload].
+
+    Returns (msg_type, payload) tuple, or None if socket closed or length invalid.
+    """
+    hdr = b""
+    while len(hdr) < 5:
+        chunk = sock.recv(5 - len(hdr))
+        if not chunk:
+            return None
+        hdr += chunk
+
+    msg_type, length = struct.unpack("<BI", hdr)
+    if length > max_length:
+        logging.warning("Frame length %d exceeds maximum allowed %d", length, max_length)
+        return None
+
+    payload = bytearray()
+    while len(payload) < length:
+        chunk = sock.recv(length - len(payload))
+        if not chunk:
+            return None
+        payload.extend(chunk)
+
+    return msg_type, bytes(payload)
 
 
 def find_firmware_zip(search_dir: Path) -> Path | None:
@@ -88,24 +123,22 @@ class MockBridgeServer:
             with conn:
                 conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
                 # Send 0x01 status text
-                status_payload = b"bridge connected"
-                conn.sendall(struct.pack("<BI", 0x01, len(status_payload)) + status_payload)
+                write_frame(conn, 0x01, b"bridge connected")
                 # Send 0x10 screen info (1280x800)
                 screen_payload = struct.pack("<HH", SCREEN_WIDTH, SCREEN_HEIGHT)
-                conn.sendall(struct.pack("<BI", 0x10, len(screen_payload)) + screen_payload)
+                write_frame(conn, 0x10, screen_payload)
                 # Echo loop for client commands
                 conn.settimeout(2.0)
                 while self.running:
                     try:
-                        hdr = conn.recv(5)
-                        if not hdr or len(hdr) < 5:
+                        frame = read_frame(conn)
+                        if frame is None:
                             break
-                        msg_type, length = struct.unpack("<BI", hdr)
-                        payload = conn.recv(length) if length > 0 else b""
+                        msg_type, _ = frame
                         if msg_type == 0x21:  # full frame request
                             tile_hdr = struct.pack("<HHHH", 0, 0, 64, 64)
                             tile_pixels = b"\x00\x00\x00\xff" * (64 * 64)
-                            conn.sendall(struct.pack("<BI", 0x11, len(tile_hdr) + len(tile_pixels)) + tile_hdr + tile_pixels)
+                            write_frame(conn, 0x11, tile_hdr + tile_pixels)
                     except (socket.timeout, OSError):
                         break
 
@@ -115,57 +148,57 @@ class MockBridgeServer:
         if self.server_socket:
             try:
                 self.server_socket.close()
-            except OSError:
-                pass
+            except OSError as exc:
+                logging.warning("Failed to close mock bridge socket: %s", exc)
             self.server_socket = None
+
+
+def connect_bridge_socket(host: str, port: int, timeout: float) -> socket.socket | None:
+    """Connect to bridge with retry loop until timeout expires.
+
+    Ensures any socket descriptor created during a failed attempt is cleanly closed.
+    """
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(2.0)
+        try:
+            sock.connect((host, port))
+            return sock
+        except OSError:
+            sock.close()
+            time.sleep(0.5)
+    return None
 
 
 def test_bridge_client(host: str = "127.0.0.1", port: int = DEFAULT_PORT, timeout: float = 10.0) -> bool:
     """Connect to bridge and assert protocol handshake frames."""
-    start_time = time.time()
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.settimeout(2.0)
-
-    connected = False
-    while time.time() - start_time < timeout:
-        try:
-            s.connect((host, port))
-            connected = True
-            break
-        except OSError:
-            time.sleep(0.5)
-
-    if not connected:
+    sock = connect_bridge_socket(host, port, timeout)
+    if sock is None:
         print(f"Failed to connect to bridge at {host}:{port} within {timeout}s", file=sys.stderr)
         return False
 
-    with s:
+    with sock:
+        start_time = time.time()
         received_status = False
         received_screen = False
 
         while time.time() - start_time < timeout:
             try:
-                hdr = s.recv(5)
-                if not hdr or len(hdr) < 5:
+                frame = read_frame(sock)
+                if frame is None:
                     break
-                msg_type, length = struct.unpack("<BI", hdr)
-                payload = b""
-                while len(payload) < length:
-                    chunk = s.recv(length - len(payload))
-                    if not chunk:
-                        break
-                    payload += chunk
+                msg_type, payload = frame
 
                 if msg_type == 0x01:
                     print(f"Received status frame (0x01): {payload.decode(errors='replace')}")
                     received_status = True
                 elif msg_type == 0x10:
-                    width, height = struct.unpack("<HH", payload[:4])
-                    print(f"Received screen info (0x10): {width}x{height}")
-                    if width == SCREEN_WIDTH and height == SCREEN_HEIGHT:
+                    dims = struct.unpack("<HH", payload[:4])
+                    print(f"Received screen info (0x10): {dims[0]}x{dims[1]}")
+                    if dims == (SCREEN_WIDTH, SCREEN_HEIGHT):
                         received_screen = True
-                    # Request full frame to verify bidirectional communication
-                    s.sendall(struct.pack("<BI", 0x21, 0))
+                    write_frame(sock, 0x21, b"")
 
                 if received_status and received_screen:
                     print("Smoke test protocol verification successful.")
