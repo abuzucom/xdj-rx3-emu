@@ -6,6 +6,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 One deviation applies. A version heading parenthesizes the release date.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] (2026-10-03)
+
+### Added
+- `docs/template-drift.md` records what this repository took from the agents,
+  foucault, euler, and rough templates, what it declined, every local
+  difference, and the license boundary.
+
 ## [0.2.0] (2026-10-03)
 
 ### Added
