@@ -153,11 +153,11 @@ jobs:
       - name: Check no untested statement entered the hooks
         run: python scripts/check_hook_coverage.py
       - name: Check American spelling (warning only)
-        run: python scripts/check_us_spelling.py AGENTS.md README.md CHANGELOG.md docs/development.md docs/project-orientation.md plan/HANDOFF.md.example SECURITY.md CONTRIBUTING.md .github/PULL_REQUEST_TEMPLATE.md .github/ISSUE_TEMPLATE.md
+        run: python scripts/check_us_spelling.py AGENTS.md README.md CHANGELOG.md docs/development.md docs/project-orientation.md docs/pr-security-review.md docs/pr-quality-review.md plan/HANDOFF.md.example SECURITY.md CONTRIBUTING.md .github/PULL_REQUEST_TEMPLATE.md .github/ISSUE_TEMPLATE.md
       - name: Check English only (warning only)
-        run: python scripts/check_english_only.py AGENTS.md README.md CHANGELOG.md docs/development.md docs/project-orientation.md plan/HANDOFF.md.example SECURITY.md CONTRIBUTING.md .github/PULL_REQUEST_TEMPLATE.md .github/ISSUE_TEMPLATE.md
+        run: python scripts/check_english_only.py AGENTS.md README.md CHANGELOG.md docs/development.md docs/project-orientation.md docs/pr-security-review.md docs/pr-quality-review.md plan/HANDOFF.md.example SECURITY.md CONTRIBUTING.md .github/PULL_REQUEST_TEMPLATE.md .github/ISSUE_TEMPLATE.md
       - name: Check prose policy (warning only)
-        run: python scripts/check_hedging.py AGENTS.md CHANGELOG.md docs/development.md docs/project-orientation.md plan/HANDOFF.md.example SECURITY.md CONTRIBUTING.md .github/PULL_REQUEST_TEMPLATE.md .github/ISSUE_TEMPLATE.md
+        run: python scripts/check_hedging.py AGENTS.md CHANGELOG.md docs/development.md docs/project-orientation.md docs/pr-security-review.md docs/pr-quality-review.md plan/HANDOFF.md.example SECURITY.md CONTRIBUTING.md .github/PULL_REQUEST_TEMPLATE.md .github/ISSUE_TEMPLATE.md
       - name: Check pull request prose (warning only)
         if: github.event_name == 'pull_request'
         run: python scripts/check_pull_request_message.py
@@ -167,4 +167,4 @@ jobs:
       - name: Check dashes and ASCII in template files
         run: python scripts/check_ascii.py plan/HANDOFF.md.example SECURITY.md CONTRIBUTING.md .github/PULL_REQUEST_TEMPLATE.md .github/ISSUE_TEMPLATE.md
       - name: Check dashes and ASCII in this repo's own prose
-        run: python scripts/check_ascii.py CHANGELOG.md docs/development.md docs/project-orientation.md
+        run: python scripts/check_ascii.py CHANGELOG.md docs/development.md docs/project-orientation.md docs/pr-security-review.md docs/pr-quality-review.md
