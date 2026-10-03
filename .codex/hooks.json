@@ -1,0 +1,51 @@
+{
+  "description": "Repository policy reinjection and strict branch preflight.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python hooks/reinject_agents_policy.py --client codex",
+            "commandWindows": "python hooks/reinject_agents_policy.py --client codex",
+            "timeout": 30,
+            "additionalContextLimit": 0
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python hooks/reinject_agents_policy.py --client codex",
+            "commandWindows": "python hooks/reinject_agents_policy.py --client codex",
+            "timeout": 30,
+            "additionalContextLimit": 0
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python hooks/enforce_gate_adoption.py --client codex",
+            "commandWindows": "python hooks/enforce_gate_adoption.py --client codex",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "python hooks/enforce_branch_name.py --client codex",
+            "commandWindows": "python hooks/enforce_branch_name.py --client codex",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

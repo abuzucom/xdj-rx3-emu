@@ -1,0 +1,48 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "name": "agents-policy-session",
+            "type": "command",
+            "command": "python $GEMINI_PROJECT_DIR/hooks/reinject_agents_policy.py --client gemini",
+            "timeout": 30000
+          }
+        ]
+      }
+    ],
+    "BeforeModel": [
+      {
+        "hooks": [
+          {
+            "name": "agents-policy-model",
+            "type": "command",
+            "command": "python $GEMINI_PROJECT_DIR/hooks/reinject_agents_policy.py --client gemini",
+            "timeout": 30000
+          }
+        ]
+      }
+    ],
+    "BeforeTool": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "name": "complete-gate-adoption",
+            "type": "command",
+            "command": "python $GEMINI_PROJECT_DIR/hooks/enforce_gate_adoption.py --client gemini",
+            "timeout": 30000
+          },
+          {
+            "name": "strict-branch-preflight",
+            "type": "command",
+            "command": "python $GEMINI_PROJECT_DIR/hooks/enforce_branch_name.py --client gemini",
+            "timeout": 30000
+          }
+        ]
+      }
+    ]
+  }
+}

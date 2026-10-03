@@ -1,0 +1,33 @@
+{
+  "note": "SHA-256 of every file that must stay byte-identical across the repositories adopting these gates. Line endings are normalized before hashing. Regenerate with scripts/sync.py --write-shared and commit the result in every one of them.",
+  "shared": {
+    "hooks/_bash_parser.py": "8437b73ff29e36475bd04ffe48aadac6d4fa87fcf45d28070b25654fecfedf98",
+    "hooks/_cmd_parser.py": "4212670bc4166a5f89be120ceb6bafbc854d16743ff900f4b596b7b79fa5981b",
+    "hooks/_gate_core.py": "191a1ae07b962d82676d45a4167c4ec5cedb6c7d4fbcdd06ea711d8b056ce488",
+    "hooks/_platform_policy.py": "9cfbbee6b9a6e9e90d7d8faee8df61cf5d43ee6aa488f1e6aa563499d0d44dd9",
+    "hooks/block_destructive_bash.py": "6b73f0117dd7eab36cfc2515ecf59df7dc7bad2df61bba024dbb667029f1dd7d",
+    "hooks/block_destructive_cmd.py": "7740e565354e175db1031690a9fb021db01c4ac8205f1c83cfa045e99e2a27d5",
+    "hooks/block_destructive_powershell.py": "7c9f51bb88c9f206804a8fbf3bb88f0e507391f34fa4acaa5535a0ebd03d406d",
+    "hooks/enforce_gate_adoption.py": "85fbd00d2a45e1c2b593523b123638a7365abacb54c6584ac282dd2ae1a9dbec",
+    "hooks/github-command-denylist.txt": "0b043edb1beaa5c37d38137e5b958fad35b5fbdad045063ed30fa8c19ee13a13",
+    "hooks/reinject_agents_policy.py": "ff694eddfab42ad065dd2fe8f7daf2872fbc4e751aa654ed720f40aff9e17572",
+    "hooks/require_consent.py": "de3b32b70d182441f6426d36742e532e7e09ac755bc9c61b99832ab52e8508da",
+    "scripts/check_gate_adoption.py": "b57269a0a54bc90111fb3cb29927ad3f836317d8958bb58181b4a9aa138648d8",
+    "scripts/check_gate_pr_integrity.py": "4ad46516e93ef5feb709eaef4bb7f192ad7d3ffc3f75bdae83678d683ab26406",
+    "scripts/check_hook_launchers.py": "e089850f9bab0b5280ccd3e1bd331a0c6d9d1137eb50cee03c1a25aed2cd05d5",
+    "scripts/complete_gate_adoption.py": "0d411030287e7ac56049c0137ae0dc7a43d404fdfcfcf97e5e91c4e88643ff81",
+    "tests/gate_corpus.py": "cdd1a64831a8001fabc592df45f9c80ef2705c963cae31e20e75eb67dc44000a",
+    "tests/json_line_worker.py": "57cbf9ed4c57506201e9c9e4ae57d6b8a330d5ede2f8fb76f0c4f72dae55fc0b",
+    "tests/json_line_worker_child.py": "bad155acd0f37cf37e0ed12ac6c35755a27b987a541977c48d52076912d0e83c",
+    "tests/test_block_destructive_bash.py": "18c508824bc1f10142231191f41eaa44602e8ad821b4e3ed248c0b4c61524fa8",
+    "tests/test_block_destructive_cmd.py": "80d8a3039dd5a9cfba4c2ffa38560b10be43a7ae976cadbed28ca9cef344798f",
+    "tests/test_block_destructive_powershell.py": "b5c01603e5d78b4e78710772e4f6e8ff5ff33a529f2030044d282fec0b32e6ce",
+    "tests/test_check_gate_adoption.py": "fa8fb93b8a0d06e36f93137c9f559c93a4ee9cd2b13e0ca9e2939255951c49c2",
+    "tests/test_check_gate_pr_integrity.py": "9144c4f15a9f13d1f36c3315d246abd686f2f55504d9705ab0a7c84f82fc034d",
+    "tests/test_check_hook_launchers.py": "826c48aa1d080bcb0ac70c5f11afe40d6427a1450d315945cb5face571445350",
+    "tests/test_complete_gate_adoption.py": "8ef5a127b9b7d267d1ffde8f9f6120b2a1c86a5a911db04b85a5b4adba0d3d13",
+    "tests/test_enforce_gate_adoption.py": "cc6729281399381622d9fd502dc5d7c2c4667ab0e80b5d9c4d57c7cfb300a5cf",
+    "tests/test_gate_adoption_transaction.py": "fe03b777db0daabfe094d023bad97bb6cbf7d09b69a770f411bcab2e9100ec9e",
+    "tests/test_platform_policy.py": "769d5ab1a4a6580ba54a5a3cd6fa8c13dc646bb877085047a5298a1bfe9a70c5"
+  }
+}
