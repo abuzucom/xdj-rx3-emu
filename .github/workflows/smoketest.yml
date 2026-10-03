@@ -26,6 +26,17 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Cache Firmware Archive
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4.2.0
+        id: firmware-cache
+        with:
+          path: firmware/
+          key: firmware-${{ hashFiles('firmware/firmware.sha256') }}
+
+      - name: Download and Verify Firmware on Cache Miss
+        if: steps.firmware-cache.outputs.cache-hit != 'true'
+        run: python scripts/smoke_test.py --action prepare --download
+
       - name: Run Smoke Test Unit & Protocol Suite
         run: python -m unittest tests.test_smoke_test
 

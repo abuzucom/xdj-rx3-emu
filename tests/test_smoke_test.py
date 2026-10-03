@@ -16,6 +16,8 @@ from scripts.smoke_test import (
     DEFAULT_PORT,
     EXPECTED_FIRMWARE_SHA256,
     FIRMWARE_ARCHIVE_NAME,
+    MAX_DOWNLOAD_BYTES,
+    MAX_EXTRACT_BYTES,
     MAX_FRAME_LENGTH,
     MIN_UPD_BYTES,
     SCREEN_HEIGHT,
@@ -28,6 +30,7 @@ from scripts.smoke_test import (
     connect_bridge_socket,
     download_firmware,
     find_firmware_zip,
+    load_expected_hash,
     prepare_firmware,
     read_frame,
     test_bridge_client,
@@ -203,6 +206,95 @@ class SmokeTestBridgeProtocolTest(unittest.TestCase):
             out_dir = tmp_path / "extracted"
             with self.assertRaises(ValueError):
                 prepare_firmware(bad_zip, out_dir)
+
+    def test_load_expected_hash(self) -> None:
+        """Verify load_expected_hash reads sha256 from firmware hash file."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            hash_file = Path(tmp_dir) / "test.sha256"
+            sample_hash = "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+            hash_file.write_text(f"{sample_hash}  test.zip\n", encoding="utf-8")
+            loaded = load_expected_hash(hash_file)
+            self.assertEqual(loaded, sample_hash)
+
+    def test_acquire_firmware_hash_mismatch_raises(self) -> None:
+        """Verify acquire_firmware raises ValueError on hash mismatch without downloading."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            fw_dir = Path(tmp_dir)
+            archive = fw_dir / FIRMWARE_ARCHIVE_NAME
+            archive.write_bytes(b"corrupted or wrong data")
+            expected_hash = "0000000000000000000000000000000000000000000000000000000000000000"
+
+            with self.assertRaises(ValueError) as ctx:
+                acquire_firmware(fw_dir, expected_sha256=expected_hash, allow_download=True)
+            self.assertIn("mismatch", str(ctx.exception).lower())
+
+    def test_acquire_firmware_missing_and_download_disallowed(self) -> None:
+        """Verify acquire_firmware raises FileNotFoundError when allow_download is False."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            fw_dir = Path(tmp_dir)
+            with self.assertRaises(FileNotFoundError):
+                acquire_firmware(fw_dir, allow_download=False)
+
+    def test_download_firmware_exceeds_max_bytes(self) -> None:
+        """Verify download_firmware aborts when download exceeds MAX_DOWNLOAD_BYTES."""
+        import io
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            dest_file = Path(tmp_dir) / "oversized.zip"
+
+            class OversizedStream(io.BytesIO):
+                def __init__(self) -> None:
+                    super().__init__(b"X" * 65536)
+                    self._read_count = 0
+
+                def read(self, size: int = -1) -> bytes:
+                    self._read_count += 1
+                    if self._read_count > (MAX_DOWNLOAD_BYTES // 65536) + 2:
+                        return b""
+                    return b"A" * 65536
+
+            with patch("urllib.request.urlopen", return_value=OversizedStream()):
+                with self.assertRaises(ValueError) as ctx:
+                    download_firmware("http://example.com/huge.zip", dest_file)
+                self.assertIn("exceeded maximum allowed limit", str(ctx.exception))
+
+    def test_prepare_firmware_rejects_parent_dir_traversal(self) -> None:
+        """Verify prepare_firmware rejects zip entries with relative traversal in name."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            zip_path = tmp_path / "traversal.zip"
+            with zipfile.ZipFile(zip_path, "w") as zf:
+                zf.writestr("../escaped.exe", b"0" * 100)
+
+            out_dir = tmp_path / "out"
+            out_dir.mkdir()
+            with self.assertRaises(ValueError) as ctx:
+                prepare_firmware(zip_path, out_dir)
+            self.assertIn("traversal", str(ctx.exception).lower())
+
+    def test_prepare_firmware_rejects_symlink_entry(self) -> None:
+        """Verify prepare_firmware rejects zip entries with symlink attribute."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            zip_path = tmp_path / "symlink.zip"
+            with zipfile.ZipFile(zip_path, "w") as zf:
+                info = zipfile.ZipInfo("symlink.exe")
+                info.external_attr = 0o120777 << 16
+                zf.writestr(info, "target_outside")
+
+            out_dir = tmp_path / "out"
+            out_dir.mkdir()
+            with self.assertRaises(ValueError) as ctx:
+                prepare_firmware(zip_path, out_dir)
+            self.assertIn("symlink", str(ctx.exception).lower())
+
+    def test_mock_bridge_server_context_manager(self) -> None:
+        """Verify MockBridgeServer operates cleanly inside a with-statement."""
+        test_port = 4486
+        with MockBridgeServer(port=test_port) as server:
+            success = test_bridge_client(host="127.0.0.1", port=test_port, timeout=5.0)
+            self.assertTrue(success)
 
 
 class FirmwareArchiveIntegrationTest(unittest.TestCase):
