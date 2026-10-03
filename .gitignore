@@ -13,3 +13,9 @@ proot
 __pycache__/
 *.log
 *.pyc
+
+# Tooling
+.ruff_cache/
+.venv/
+venv/
+.gate-staging/

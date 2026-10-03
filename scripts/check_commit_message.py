@@ -1,0 +1,244 @@
+#!/usr/bin/env python3
+"""Warn about commit subjects breaking the `type: description` format.
+
+A portable, path-generic checker: copy this file into any repo and run
+it in CI on `pull_request` events, over a `--base`/`--head` commit range.
+Not a drop-in `commit-msg` hook: that hook receives a message-file path,
+not two refs. Strips a trailing GitHub squash-merge suffix (` (#123)`)
+before checking length, since that suffix is not user-authored. Skips merge
+commits for the same reason: `git merge` writes "Merge branch 'x' into y",
+which no author chose and which no `type: description` subject can express.
+Cannot verify imperative mood, only shape. Always exits 0, even when it finds
+violations; this check is advisory, not blocking.
+"""
+import argparse
+import os
+import re
+import subprocess
+import sys
+
+try:
+    from scripts.trusted_git import run_git
+    from scripts.prose_policy import find_violations as find_prose_violations
+except ModuleNotFoundError:
+    from trusted_git import run_git
+    from prose_policy import find_violations as find_prose_violations
+
+COMMIT_TYPES = "feat, fix, chore, docs, test, ci"
+SUBJECT_PATTERN = re.compile(r"^(feat|fix|chore|docs|test|ci): \S.*$")
+TYPE_PREFIX_PATTERN = re.compile(r"^(?:feat|fix|chore|docs|test|ci):\s+")
+SQUASH_SUFFIX = re.compile(r" \(#\d+\)$")
+MAX_LENGTH = 50
+MAX_COMMIT_COUNT = 200
+MAX_METADATA_BYTES = 4 * 1024 * 1024
+RECORD_SEPARATOR = "\x1e"
+FIELD_SEPARATOR = "\x1f"
+
+
+def _strip_squash_suffix(subject: str) -> str:
+    """Remove a trailing GitHub squash-merge ` (#123)` suffix, if present."""
+    return SQUASH_SUFFIX.sub("", subject)
+
+
+def mask_type_prefix(subject: str) -> str:
+    """Mask a valid metadata prefix while preserving diagnostic columns."""
+    match = TYPE_PREFIX_PATTERN.match(subject)
+    if not match:
+        return subject
+    return " " * match.end() + subject[match.end():]
+
+
+def find_violations(subjects: list[tuple[str, str]]) -> list[str]:
+    """Return one message per commit subject violating the format rule.
+
+    `subjects` is a list of (sha, subject) pairs.
+    """
+    violations = []
+    for sha, raw_subject in subjects:
+        short_sha = sha[:12]
+        prefix = f"{short_sha}: " if short_sha else ""
+        subject = _strip_squash_suffix(raw_subject)
+        if not SUBJECT_PATTERN.match(subject):
+            violations.append(
+                f"warning: {prefix}subject '{raw_subject}' must start with "
+                f"'type: description' ({COMMIT_TYPES})"
+            )
+            continue
+        if len(subject) > MAX_LENGTH:
+            violations.append(
+                f"warning: {prefix}subject '{raw_subject}' exceeds {MAX_LENGTH} "
+                f"characters ({len(subject)})"
+            )
+        if subject.endswith("."):
+            violations.append(f"warning: {prefix}subject '{raw_subject}' ends with a period")
+    return violations
+
+
+def find_title_violations(subject: str) -> list[str]:
+    """Return sanitized title-format warnings for pull request metadata."""
+    title = _strip_squash_suffix(subject)
+    findings = []
+    if not SUBJECT_PATTERN.match(title):
+        findings.append(
+            "warning: pull_request.title: title format must use "
+            "'type: description'"
+        )
+        return findings
+    if len(title) > MAX_LENGTH:
+        findings.append(
+            f"warning: pull_request.title: title exceeds {MAX_LENGTH} characters"
+        )
+    if title.endswith("."):
+        findings.append("warning: pull_request.title: title ends with a period")
+    return findings
+
+
+def find_message_prose_violations(
+        messages: list[tuple[str, str, str]]) -> list[str]:
+    """Return sanitized prose findings for commit subjects and bodies."""
+    findings = []
+    for sha, subject, body in messages:
+        short_sha = sha[:12]
+        findings.extend(
+            find_prose_violations(
+                mask_type_prefix(subject),
+                f"commit.{short_sha}.subject",
+            )
+        )
+        findings.extend(
+            find_prose_violations(body, f"commit.{short_sha}.body")
+        )
+    return findings
+
+
+def check_messages(messages: list[tuple[str, str, str]]) -> int:
+    """Print format and prose findings for supplied commit messages."""
+    findings = find_message_violations(messages)
+    for message in findings:
+        print(message)
+    if not findings:
+        print("no commit-message violations found")
+    return 0
+
+
+def find_message_violations(
+        messages: list[tuple[str, str, str]]) -> list[str]:
+    """Return format and prose findings for full commit messages."""
+    subjects = [(sha, subject) for sha, subject, _body in messages]
+    findings = find_violations(subjects)
+    findings.extend(find_message_prose_violations(messages))
+    return findings
+
+
+def load_commits(base: str, head: str, repo=None) -> list[tuple[str, str]]:
+    """Collect (sha, subject) pairs for the base..head range via git log.
+
+    Merge commits are excluded: their subject is generated by git rather
+    than written by a person, so holding it to an authoring convention
+    fails every ordinary branch update.
+    """
+    repository = repo or os.getcwd()
+    result = run_git(
+        repository,
+        [
+            "log",
+            "--no-merges",
+            "--no-ext-diff",
+            "--format=%H%x00%s",
+            "--end-of-options",
+            f"{base}..{head}",
+        ],
+        check=True,
+        runner=subprocess.run,
+    )
+    commits = []
+    for line in result.stdout.splitlines():
+        if not line:
+            continue
+        fields = line.split("\x00")
+        if len(fields) != 2 or not re.fullmatch(r"[0-9a-fA-F]{40,64}", fields[0]):
+            raise ValueError("git log returned malformed commit metadata")
+        sha, subject = fields
+        commits.append((sha, subject))
+    return commits
+
+
+def _parse_message_records(stdout: str) -> list[tuple[str, str, str]]:
+    """Return validated (sha, subject, body) triples from bounded git output."""
+    if len(stdout.encode("utf-8")) > MAX_METADATA_BYTES:
+        raise ValueError("git log returned excessive commit metadata")
+    messages = []
+    for raw_record in stdout.split(RECORD_SEPARATOR):
+        record = raw_record.strip("\r\n")
+        if not record:
+            continue
+        fields = record.split(FIELD_SEPARATOR)
+        if len(fields) != 3 or not re.fullmatch(r"[0-9a-fA-F]{40,64}", fields[0]):
+            raise ValueError("git log returned malformed commit metadata")
+        messages.append((fields[0], fields[1], fields[2]))
+    return messages
+
+
+def _message_log_arguments(revisions: list[str]) -> list[str]:
+    """Return the bounded git log arguments shared by both message loaders."""
+    return [
+        "log",
+        "--no-merges",
+        "--no-ext-diff",
+        f"--max-count={MAX_COMMIT_COUNT}",
+        f"--format=%H{FIELD_SEPARATOR}%s{FIELD_SEPARATOR}%b{RECORD_SEPARATOR}",
+        *revisions,
+    ]
+
+
+def load_commit_messages(
+        base: str, head: str, repo=None) -> list[tuple[str, str, str]]:
+    """Collect bounded full commit messages for one validated range."""
+    repository = repo or os.getcwd()
+    result = run_git(
+        repository,
+        _message_log_arguments(["--end-of-options", f"{base}..{head}"]),
+        check=True,
+        runner=subprocess.run,
+    )
+    return _parse_message_records(result.stdout)
+
+
+def load_unpushed_messages(repo=None) -> list[tuple[str, str, str]]:
+    """Collect bounded messages for commits on HEAD absent from every remote."""
+    repository = repo or os.getcwd()
+    remotes = run_git(repository, ["remote"], runner=subprocess.run)
+    if remotes.returncode != 0:
+        raise subprocess.CalledProcessError(remotes.returncode, "git remote")
+    if not remotes.stdout.strip():
+        return []
+    result = run_git(
+        repository,
+        _message_log_arguments(
+            ["--not", "--remotes", "--not", "--end-of-options", "HEAD"]),
+        check=True,
+        runner=subprocess.run,
+    )
+    return _parse_message_records(result.stdout)
+
+
+def check(base: str, head: str, repo=None) -> int:
+    """Warn on violations in the base..head commit range. Always returns 0."""
+    return check_messages(load_commit_messages(base, head, repo))
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--base", required=True, help="base ref (exclusive)")
+    parser.add_argument("--head", required=True, help="head ref (inclusive)")
+    parser.add_argument("--repo", default=os.getcwd(), help="repository to inspect (default: cwd)")
+    args = parser.parse_args()
+    try:
+        return check(args.base, args.head, args.repo)
+    except (OSError, subprocess.CalledProcessError, UnicodeError, ValueError) as error:
+        print(f"error: git log failed: {error}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

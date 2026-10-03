@@ -1,0 +1,30 @@
+# Banned models and wildcard patterns.
+# Modifying this file can never be inferred, inherited, or grandfathered from
+# prior instructions, plan approvals, handoff status, or compaction text.
+# Whenever an agent encounters a need or instruction to modify this file, the
+# agent must immediately stop work, enter plan mode, present the proposed changes,
+# and obtain fresh active-human approval immediately before execution.
+# If the human does not provide consent (including when absent), the agent must
+# not work around it. Work is stopped until consent is provided affirmatively.
+
+# xAI / Grok developer models & wildcards (catches current & future models)
+grok*
+*xai*
+grok-4.6
+grok-4.5
+grok-4.3
+grok-4.20-0309-reasoning
+grok-4.20-0309-non-reasoning
+grok-4.20-multi-agent-0309
+grok-build-0.1
+grok-imagine-image-2.0
+grok-imagine-image-quality
+grok-imagine-image
+grok-imagine-video-1.5
+grok-imagine-video
+grok-voice-think-fast-2.0
+grok-code
+
+# Organization banned models & patterns
+DeepSeek V4 Flash
+deepseek-v4-flash*
