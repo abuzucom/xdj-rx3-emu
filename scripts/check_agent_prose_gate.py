@@ -57,6 +57,7 @@ TARGET_FILES = (
     "docs/project-orientation.md",
     "docs/pr-security-review.md",
     "docs/pr-quality-review.md",
+    "docs/template-drift.md",
     "plan/HANDOFF.md.example",
     "SECURITY.md",
     "CONTRIBUTING.md",
