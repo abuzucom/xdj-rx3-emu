@@ -13,7 +13,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   protocol via a mock TCP server, and verifies client handshakes.
 - Firmware download and SHA-256 integrity verification against
   `firmware/firmware.sha256` in `scripts/smoke_test.py`.
-- Support for AlphaTheta firmware package `XDJRX31110exe.zip` and executable payloads.
+- Support for official AlphaTheta firmware package `XDJ-RX3_v120.zip` and `XDJRX3.UPD` payload.
 - CLI flags `--firmware-dir`, `--url`, `--expected-hash`, and `--download`.
 - `.github/workflows/smoketest.yml` runs automated smoke tests in CI with firmware caching.
 - `.github/workflows/seed-firmware-cache.yml` adds manual dispatch to seed workflow storage cache.

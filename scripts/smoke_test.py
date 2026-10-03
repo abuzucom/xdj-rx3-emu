@@ -30,12 +30,12 @@ MAX_FRAME_LENGTH = 1_048_576
 MAX_DOWNLOAD_BYTES = 1_073_741_824
 MAX_EXTRACT_BYTES = 2_147_483_648
 DEFAULT_FIRMWARE_URL = (
-    "https://downloads.support.alphatheta.com/drivers/all-in-one-dj-systems/XDJ-RX3/XDJRX31110exe.zip"
+    "https://downloads.support.alphatheta.com/firmwares/all-in-one-dj-systems/XDJ-RX3/XDJ-RX3_v120.zip"
 )
 EXPECTED_FIRMWARE_SHA256 = (
-    "3db66f95199b22aa3115decf0ed03549761ca6f29a4cf113fa583c6da891c4e0"
+    "e81f34ef300c5faa7faf4b4c436eaaf1476d407447b2dbb845c7fbddb4f51389"
 )
-FIRMWARE_ARCHIVE_NAME = "XDJRX31110exe.zip"
+FIRMWARE_ARCHIVE_NAME = "XDJ-RX3_v120.zip"
 DEFAULT_HASH_FILE = Path("firmware/firmware.sha256")
 
 
