@@ -6,6 +6,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 One deviation applies. A version heading parenthesizes the release date.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] (2026-10-03)
+
+### Added
+- PR quality review through `abuzucom/euler`, run after `ci` completes.
+- `docs/pr-security-review.md` and `docs/pr-quality-review.md` record the
+  reviewer wiring.
+
 ## [0.1.0] (2026-10-03)
 
 ### Added

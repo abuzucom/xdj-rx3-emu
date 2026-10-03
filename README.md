@@ -79,7 +79,7 @@ commits. Merge `master` into `main` through a pull request.
 
 See `docs/development.md` for commands, `CONTRIBUTING.md` for conventions, and
 `AGENTS.md` for the agent policy. Pull requests run the Ruff baseline, the
-agent policy checks, and the foucault security review.
+agent policy checks, the foucault security review, and the euler quality review.
 
 Handoffs use `plan/HANDOFF.md.example`. Inspect a handoff only after an
 active-user request. Do not run Git commands before consent. After consent,
