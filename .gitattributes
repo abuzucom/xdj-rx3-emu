@@ -1,0 +1,20 @@
+# Normalize line endings: LF in repo, platform-native in working tree.
+* text=auto
+
+# Keep policy inputs within the byte limit on every platform.
+AGENTS.md text eol=lf
+CLAUDE.md text eol=lf
+GEMINI.md text eol=lf
+CONVENTIONS.md text eol=lf
+.cursorrules text eol=lf
+.clinerules text eol=lf
+.windsurfrules text eol=lf
+.copilot-instructions text eol=lf
+.github/copilot-instructions.md text eol=lf
+docs/agent-policy/*.md text eol=lf
+
+# WSL runs these from a Windows checkout; CRLF would break bash and the shims.
+*.sh text eol=lf
+*.py text eol=lf
+*.c text eol=lf
+*.conf text eol=lf
