@@ -1,4 +1,7 @@
 # never commit Pioneer firmware, keys or anything extracted from them
+firmware/*
+!firmware/.gitkeep
+!firmware/*.sha256
 *.zip
 *.bin
 *.img

@@ -1,0 +1,35 @@
+---
+name: seed-firmware-cache
+
+# Manually-approved workflow to seed the proprietary firmware archive
+# into GitHub Actions workflow cache storage.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  seed-cache:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Cache Firmware Archive
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4.2.0
+        id: firmware-cache
+        with:
+          path: firmware/
+          key: firmware-${{ hashFiles('firmware/firmware.sha256') }}
+
+      - name: Download and Verify Firmware
+        if: steps.firmware-cache.outputs.cache-hit != 'true'
+        run: python scripts/smoke_test.py --action prepare --download

@@ -22,7 +22,8 @@ print("loudest second at", bi / 44100.0, "s peak", best)
 seg = [(a[2 * k] + a[2 * k + 1]) * 0.5 for k in range(bi, bi + 32768)]
 # zero crossings -> frequency assuming 44100
 zc = sum(1 for k in range(1, len(seg)) if seg[k - 1] < 0 <= seg[k])
-print("zero-crossing estimate (assuming 44.1k):", zc * 44100.0 / len(seg), "Hz")
+zc_freq = (zc * 44100.0 / len(seg)) if len(seg) > 0 else 0.0
+print("zero-crossing estimate (assuming 44.1k):", zc_freq, "Hz")
 # DFT peak
 N = 32768
 mag = []
@@ -33,9 +34,11 @@ for f in range(300, 600, 1):
         re += seg[k] * math.cos(ang)
         im -= seg[k] * math.sin(ang)
     mag.append((re * re + im * im, f))
+peak_val = max(mag)[1] if mag else 0
+source_rate = (44100.0 * 440.0 / peak_val) if peak_val > 0 else 0.0
 print(
     "DFT peak (assuming 44.1k):",
-    max(mag)[1],
+    peak_val,
     "Hz  -> real source rate if tone is 440 Hz:",
-    44100.0 * 440.0 / max(mag)[1],
+    source_rate,
 )

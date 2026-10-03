@@ -6,6 +6,31 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 One deviation applies. A version heading parenthesizes the release date.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] (2026-10-03)
+
+### Added
+- `scripts/smoke_test.py` validates firmware zip archives, simulates the bridge
+  protocol via a mock TCP server, and verifies client handshakes.
+- Firmware download and SHA-256 integrity verification against
+  `firmware/firmware.sha256` in `scripts/smoke_test.py`.
+- Support for official AlphaTheta firmware package `XDJ-RX3_v120.zip` and `XDJRX3.UPD` payload.
+- CLI flags `--firmware-dir`, `--url`, `--expected-hash`, and `--download`.
+- `.github/workflows/smoketest.yml` runs automated smoke tests in CI with firmware caching.
+- `.github/workflows/seed-firmware-cache.yml` adds manual dispatch to seed workflow storage cache.
+- `tests/test_smoke_test.py` covers archive discovery, size assertions, wire framing,
+  hash calculation, and download validation.
+- Tracking of `firmware/firmware.sha256` while ignoring firmware binaries in `.gitignore`.
+
+### Fixed
+- Removed auto-download from CI in `.github/workflows/smoketest.yml` and required workflow storage cache.
+- Enclosed test and client sockets in context managers to guarantee resource release.
+- Added path traversal, symlink, and decompression size limit validation on archives.
+- Bound client and server protocol frame sizes to 1 MiB in `scripts/smoke_test.py`.
+- Added payload length bounds check before unpacking screen info frames in `_handle_handshake`.
+- Added per-read timeout handling to `read_frame`.
+- `wsl/test-e2e.sh` imports `os` and parameterizes bridge and screenshot paths.
+- `wsl/measure-pitch.py` guards divisions against zero on silent audio buffers.
+
 ## [0.2.1] (2026-10-03)
 
 ### Added
