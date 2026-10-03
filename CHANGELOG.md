@@ -6,6 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 One deviation applies. A version heading parenthesizes the release date.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] (2026-10-03)
+
+### Added
+- Remote firmware downloading and SHA-256 verification in `scripts/smoke_test.py`.
+- Support for AlphaTheta firmware package `XDJRX31110exe.zip` and executable payloads.
+- CLI flags `--firmware-dir`, `--url`, and `--expected-hash` for flexible firmware acquisition.
+- Unit tests for SHA-256 calculation, remote download validation, and executable payload extraction.
+
+### Fixed
+- Added path traversal and symlink validation on all extracted archive target paths.
+- Added payload length bounds check before unpacking screen info frames in `_handle_handshake`.
+
 ## [0.3.2] (2026-10-03)
 
 ### Fixed

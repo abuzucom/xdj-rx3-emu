@@ -6,19 +6,27 @@ from __future__ import annotations
 import socket
 import struct
 import tempfile
+import time
 import unittest
 import zipfile
 from pathlib import Path
 
 from scripts.smoke_test import (
+    DEFAULT_FIRMWARE_URL,
     DEFAULT_PORT,
+    EXPECTED_FIRMWARE_SHA256,
+    FIRMWARE_ARCHIVE_NAME,
     MAX_FRAME_LENGTH,
     MIN_UPD_BYTES,
     SCREEN_HEIGHT,
     SCREEN_WIDTH,
     UPD_FILENAME,
     MockBridgeServer,
+    _handle_handshake,
+    acquire_firmware,
+    compute_file_sha256,
     connect_bridge_socket,
+    download_firmware,
     find_firmware_zip,
     prepare_firmware,
     read_frame,
@@ -79,6 +87,99 @@ class SmokeTestBridgeProtocolTest(unittest.TestCase):
         """Verify connect_bridge_socket returns None cleanly without leaking sockets."""
         sock = connect_bridge_socket("127.0.0.1", port=1, timeout=0.1)
         self.assertIsNone(sock)
+
+    def test_handshake_rejects_truncated_screen_info(self) -> None:
+        """Verify _handle_handshake cleanly handles 0x10 frame shorter than 4 bytes."""
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_sock:
+            server_sock.bind(("127.0.0.1", 0))
+            server_sock.listen(1)
+            port = server_sock.getsockname()[1]
+
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_sock:
+                client_sock.connect(("127.0.0.1", port))
+                conn, _ = server_sock.accept()
+                with conn:
+                    # Send truncated 0x10 frame (only 2 bytes instead of 4)
+                    write_frame(conn, 0x10, b"\x00\x00")
+                    result = _handle_handshake(client_sock, time.time(), timeout=1.0)
+                    self.assertFalse(result)
+
+    def test_prepare_firmware_rejects_path_traversal(self) -> None:
+        """Verify prepare_firmware rejects symlink targets escaping output_dir."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            zip_path = tmp_path / "test.zip"
+            with zipfile.ZipFile(zip_path, "w") as zf:
+                zf.writestr(UPD_FILENAME, b"0" * MIN_UPD_BYTES)
+
+            out_dir = tmp_path / "sub"
+            out_dir.mkdir(parents=True, exist_ok=True)
+            target = out_dir / UPD_FILENAME
+            try:
+                target.symlink_to(tmp_path / "outside.txt")
+            except (OSError, NotImplementedError):
+                return
+
+            with self.assertRaises(ValueError):
+                prepare_firmware(zip_path, out_dir)
+
+    def test_compute_file_sha256(self) -> None:
+        """Verify compute_file_sha256 calculates expected SHA-256 digest."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sample_file = Path(tmp_dir) / "sample.bin"
+            sample_data = b"XDJ-RX3-TEST-PAYLOAD"
+            sample_file.write_bytes(sample_data)
+            import hashlib
+            expected = hashlib.sha256(sample_data).hexdigest()
+            self.assertEqual(compute_file_sha256(sample_file), expected)
+
+    def test_download_firmware_hash_validation(self) -> None:
+        """Verify download_firmware validates SHA-256 and rejects hash mismatches."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            dest_file = Path(tmp_dir) / "test.zip"
+            payload = b"MOCK_FIRMWARE_BINARY_DATA"
+            import hashlib
+            expected_hash = hashlib.sha256(payload).hexdigest()
+
+            import io
+            from unittest.mock import patch
+
+            with patch("urllib.request.urlopen", side_effect=lambda req, timeout=60.0: io.BytesIO(payload)):
+                # Valid hash matches
+                download_firmware("http://example.com/fw.zip", dest_file, expected_sha256=expected_hash)
+                self.assertTrue(dest_file.is_file())
+                self.assertEqual(compute_file_sha256(dest_file), expected_hash)
+
+                # Invalid hash raises ValueError
+                with self.assertRaises(ValueError):
+                    download_firmware("http://example.com/fw.zip", dest_file, expected_sha256="badhash")
+
+    def test_acquire_firmware_existing_archive(self) -> None:
+        """Verify acquire_firmware uses existing archive when SHA-256 matches."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            fw_dir = Path(tmp_dir)
+            archive = fw_dir / FIRMWARE_ARCHIVE_NAME
+            payload = b"MOCK_ARCHIVE_DATA"
+            archive.write_bytes(payload)
+            import hashlib
+            valid_hash = hashlib.sha256(payload).hexdigest()
+
+            result = acquire_firmware(fw_dir, url="http://example.com/fw.zip", expected_sha256=valid_hash)
+            self.assertEqual(result, archive)
+
+    def test_prepare_firmware_executable_payload(self) -> None:
+        """Verify prepare_firmware extracts .exe when UPD_FILENAME is absent."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            zip_path = tmp_path / "driver.zip"
+            exe_name = "XDJ-RX3_1.110.exe"
+            with zipfile.ZipFile(zip_path, "w") as zf:
+                zf.writestr(exe_name, b"0" * 1_500_000)
+
+            out_dir = tmp_path / "out"
+            result = prepare_firmware(zip_path, out_dir)
+            self.assertEqual(result.name, exe_name)
+            self.assertTrue(result.is_file())
 
     def test_find_firmware_zip(self) -> None:
         """Verify zip archive discovery in directory."""

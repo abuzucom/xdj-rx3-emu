@@ -8,13 +8,16 @@ and client handshake validation for local and CI environments.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import logging
 import os
+import shutil
 import socket
 import struct
 import sys
 import threading
 import time
+import urllib.request
 import zipfile
 from pathlib import Path
 
@@ -24,6 +27,13 @@ SCREEN_HEIGHT = 800
 UPD_FILENAME = "XDJRX3.UPD"
 MIN_UPD_BYTES = 50_000_000
 MAX_FRAME_LENGTH = 1_048_576
+DEFAULT_FIRMWARE_URL = (
+    "https://downloads.support.alphatheta.com/drivers/all-in-one-dj-systems/XDJ-RX3/XDJRX31110exe.zip"
+)
+EXPECTED_FIRMWARE_SHA256 = (
+    "3db66f95199b22aa3115decf0ed03549761ca6f29a4cf113fa583c6da891c4e0"
+)
+FIRMWARE_ARCHIVE_NAME = "XDJRX31110exe.zip"
 
 
 def write_frame(sock: socket.socket, msg_type: int, payload: bytes) -> None:
@@ -59,6 +69,62 @@ def read_frame(sock: socket.socket, max_length: int = MAX_FRAME_LENGTH) -> tuple
     return msg_type, bytes(payload)
 
 
+def compute_file_sha256(path: Path) -> str:
+    """Calculate the SHA-256 digest of a file in 64 KiB chunks."""
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        while True:
+            chunk = f.read(65536)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def download_firmware(url: str, dest_path: Path, expected_sha256: str | None = None) -> Path:
+    """Download firmware archive from url to dest_path and verify SHA-256."""
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_dest = dest_path.with_suffix(".tmp")
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=60.0) as resp, open(tmp_dest, "wb") as dst:
+            shutil.copyfileobj(resp, dst)
+        computed_hash = compute_file_sha256(tmp_dest)
+        if expected_sha256 and computed_hash.lower() != expected_sha256.lower():
+            raise ValueError(
+                f"Hash mismatch for {url}: expected {expected_sha256}, got {computed_hash}"
+            )
+        tmp_dest.replace(dest_path)
+        print(f"Downloaded and verified firmware archive: {dest_path} (SHA-256: {computed_hash})")
+        return dest_path
+    finally:
+        if tmp_dest.exists():
+            tmp_dest.unlink()
+
+
+def acquire_firmware(
+    firmware_dir: Path,
+    url: str = DEFAULT_FIRMWARE_URL,
+    expected_sha256: str = EXPECTED_FIRMWARE_SHA256,
+) -> Path:
+    """Ensure firmware archive is present in firmware_dir with valid SHA-256 hash."""
+    archive_path = firmware_dir / FIRMWARE_ARCHIVE_NAME
+    if not archive_path.is_file():
+        existing_zip = find_firmware_zip(firmware_dir)
+        if existing_zip:
+            archive_path = existing_zip
+    if archive_path.is_file():
+        current_hash = compute_file_sha256(archive_path)
+        print(f"Found firmware archive: {archive_path} (SHA-256: {current_hash})")
+        if expected_sha256 and current_hash.lower() == expected_sha256.lower():
+            return archive_path
+        if not expected_sha256:
+            return archive_path
+        print(f"Archive hash mismatch, re-downloading to {firmware_dir / FIRMWARE_ARCHIVE_NAME}...")
+
+    return download_firmware(url, firmware_dir / FIRMWARE_ARCHIVE_NAME, expected_sha256)
+
+
 def find_firmware_zip(search_dir: Path) -> Path | None:
     """Locate the first firmware zip archive in search_dir."""
     if not search_dir.is_dir():
@@ -68,30 +134,45 @@ def find_firmware_zip(search_dir: Path) -> Path | None:
 
 
 def prepare_firmware(zip_path: Path, output_dir: Path) -> Path:
-    """Extract and validate XDJRX3.UPD from the firmware zip archive."""
+    """Extract and validate firmware payload from the firmware zip archive."""
     if not zip_path.is_file():
         raise FileNotFoundError(f"Firmware zip not found: {zip_path}")
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    target_upd = output_dir / UPD_FILENAME
+    resolved_out = output_dir.resolve()
 
     with zipfile.ZipFile(zip_path, "r") as zf:
         names = zf.namelist()
-        if UPD_FILENAME not in names:
-            raise ValueError(f"Archive {zip_path.name} does not contain {UPD_FILENAME}")
+        if UPD_FILENAME in names:
+            payload_name = UPD_FILENAME
+            min_bytes = MIN_UPD_BYTES
+        else:
+            exe_candidates = [n for n in names if n.endswith(".exe") and not n.startswith("__MACOSX")]
+            if not exe_candidates:
+                raise ValueError(
+                    f"Archive {zip_path.name} contains neither {UPD_FILENAME} nor an executable payload"
+                )
+            payload_name = exe_candidates[0]
+            min_bytes = 1_000_000
 
-        info = zf.getinfo(UPD_FILENAME)
-        if info.file_size < MIN_UPD_BYTES:
-            raise ValueError(f"Extracted UPD file size {info.file_size} is below expected threshold")
+        target_file = output_dir / payload_name
+        resolved_target = target_file.resolve()
+        if target_file.is_symlink() or not resolved_target.is_relative_to(resolved_out):
+            raise ValueError("Archive member resolves outside output directory")
 
-        print(f"Extracting {UPD_FILENAME} ({info.file_size} bytes) to {target_upd}...")
-        zf.extract(UPD_FILENAME, path=output_dir)
+        info = zf.getinfo(payload_name)
+        if info.file_size < min_bytes:
+            raise ValueError(f"Extracted payload size {info.file_size} is below expected threshold")
 
-    if not target_upd.is_file() or target_upd.stat().st_size < MIN_UPD_BYTES:
-        raise RuntimeError(f"Extracted payload verification failed at {target_upd}")
+        print(f"Extracting {payload_name} ({info.file_size} bytes) to {target_file}...")
+        with zf.open(payload_name) as src, open(target_file, "wb") as dst:
+            shutil.copyfileobj(src, dst)
 
-    print(f"Firmware extracted and verified: {target_upd} ({target_upd.stat().st_size} bytes)")
-    return target_upd
+    if not target_file.is_file() or target_file.stat().st_size < min_bytes:
+        raise RuntimeError(f"Extracted payload verification failed at {target_file}")
+
+    print(f"Firmware extracted and verified: {target_file} ({target_file.stat().st_size} bytes)")
+    return target_file
 
 
 class MockBridgeServer:
@@ -180,6 +261,9 @@ def _handle_handshake(sock: socket.socket, start_time: float, timeout: float) ->
                 print(f"Received status frame (0x01): {payload.decode(errors='replace')}")
                 received_status = True
             elif msg_type == 0x10:
+                if len(payload) < 4:
+                    logging.warning("Screen info frame too short: %d bytes", len(payload))
+                    break
                 dims = struct.unpack("<HH", payload[:4])
                 print(f"Received screen info (0x10): {dims[0]}x{dims[1]}")
                 if dims == (SCREEN_WIDTH, SCREEN_HEIGHT):
@@ -219,6 +303,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--action", choices=["prepare", "client", "mock-server", "e2e"], default="e2e")
     parser.add_argument("--zip", type=Path, default=None, help="Path to firmware zip archive")
+    parser.add_argument("--firmware-dir", type=Path, default=Path("firmware"), help="Directory for firmware archives")
+    parser.add_argument("--url", default=DEFAULT_FIRMWARE_URL, help="Firmware download URL")
+    parser.add_argument("--expected-hash", default=EXPECTED_FIRMWARE_SHA256, help="Expected SHA-256 hash")
     parser.add_argument("--out-dir", type=Path, default=Path("firmware/extracted"), help="Extraction directory")
     parser.add_argument("--host", default="127.0.0.1", help="Bridge host")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="Bridge port")
@@ -227,10 +314,14 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.action == "prepare":
-        zip_file = args.zip or find_firmware_zip(Path("firmware"))
-        if not zip_file:
-            print("No firmware zip found in firmware/ directory.", file=sys.stderr)
-            return 1
+        if args.zip:
+            zip_file = args.zip
+        else:
+            zip_file = acquire_firmware(
+                args.firmware_dir,
+                url=args.url,
+                expected_sha256=args.expected_hash,
+            )
         prepare_firmware(zip_file, args.out_dir)
         return 0
 
@@ -250,11 +341,16 @@ def main() -> int:
         return 0 if success else 1
 
     if args.action == "e2e":
-        # Check firmware archive if present
-        zip_file = args.zip or find_firmware_zip(Path("firmware"))
-        if zip_file:
-            print(f"Found firmware archive: {zip_file}")
-            prepare_firmware(zip_file, args.out_dir)
+        if args.zip:
+            zip_file = args.zip
+        else:
+            zip_file = acquire_firmware(
+                args.firmware_dir,
+                url=args.url,
+                expected_sha256=args.expected_hash,
+            )
+        print(f"Using firmware archive: {zip_file}")
+        prepare_firmware(zip_file, args.out_dir)
 
         # Run mock server and client handshake validation
         server = MockBridgeServer(port=args.port)
