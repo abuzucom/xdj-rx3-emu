@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -50,6 +51,8 @@ WSL_INSTALL_HINT = (
 )
 ARMEL_WRAPPER_BODY = '#!/bin/sh\nexec "$(ls "$HOME/rx3/tc-armel/bin/"*-gcc | head -n 1)" "$@"\n'
 USB1_SOURCE_ENV = "RX3_USB1_SOURCE"
+USB1_ALLOWED_ROOT_ENV = "RX3_USB1_ALLOWED_ROOT"
+USB1_SYNC_TIMEOUT_SECONDS = 600
 FETCH_MARKERS = ("~/rx3/proot", "~/rx3/tc-armel", "~/rx3/rx3-handoff/extracted/runtime-files")
 BUILD_MARKER = "~/rx3/rootfs/root/pdj/rbp-pi"
 BRIDGE_ADDRESS = "127.0.0.1:4480"
@@ -245,20 +248,49 @@ def _wsl_path_from_windows(windows_path: str) -> str:
     """Translate a Windows absolute path to a WSL /mnt path."""
     p = Path(windows_path)
     if not p.is_absolute():
-        raise BootstrapError(f"USB source path must be absolute: {windows_path}")
+        raise BootstrapError(f"USB source path must be absolute: {windows_path!r}")
     drive = p.drive.replace(":", "").lower()
     return "/mnt/" + drive + "/" + "/".join(p.parts[1:])
 
 
+def _validate_usb1_source(windows_source: str) -> Path:
+    """Validate the configured source path before rsync sees it.
+
+    Requires an existing directory with no parent-traversal components. If
+    RX3_USB1_ALLOWED_ROOT is set, the source must resolve under that root.
+    """
+    if not Path(windows_source).is_absolute():
+        raise BootstrapError(f"USB1 source path must be absolute: {windows_source!r}")
+    input_path = Path(windows_source)
+    if any(part == ".." for part in input_path.parts):
+        raise BootstrapError(f"USB1 source path must not traverse parents: {windows_source!r}")
+    try:
+        src = input_path.resolve(strict=True)
+    except OSError as exc:
+        raise BootstrapError(f"USB1 source folder does not exist: {windows_source!r}") from exc
+    if not src.is_dir():
+        raise BootstrapError(f"USB1 source must be a directory: {windows_source!r}")
+    allowed_root = os.environ.get(USB1_ALLOWED_ROOT_ENV)
+    if allowed_root:
+        try:
+            root = Path(allowed_root).resolve(strict=True)
+        except OSError as exc:
+            raise BootstrapError(f"USB1 allowed root does not exist: {allowed_root!r}") from exc
+        if root not in (src, *src.parents):
+            raise BootstrapError(f"USB1 source outside allowed root {allowed_root!r}: {windows_source!r}")
+    return src
+
+
 def sync_usb1_source(runner: CommandRunner, windows_source: str) -> None:
-    """Sync the configured Windows music folder into the WSL virtual USB1 stick."""
-    if not Path(windows_source).exists():
-        raise BootstrapError(
-            f"USB1 source folder does not exist: {windows_source}. "
-            "Create it and add music, or unset RX3_USB1_SOURCE to skip this phase."
-        )
+    """Sync the validated Windows music folder into the WSL virtual USB1 stick."""
+    _validate_usb1_source(windows_source)
     wsl_src = _wsl_path_from_windows(windows_source)
-    command = f"mkdir -p ~/rx3/usb1/Music && rsync -a --delete --exclude='.*' '{wsl_src}/' ~/rx3/usb1/Music/"
+    quoted_src = shlex.quote(wsl_src + "/")
+    command = (
+        "mkdir -p ~/rx3/usb1/Music && "
+        f"timeout {USB1_SYNC_TIMEOUT_SECONDS} rsync -a --delete --max-size=1G --exclude='.*' "
+        f"{quoted_src} ~/rx3/usb1/Music/"
+    )
     result = runner.run(wsl_script(command))
     require_success(result, "USB1 music sync", "Check the source path and that rsync is installed in WSL")
 

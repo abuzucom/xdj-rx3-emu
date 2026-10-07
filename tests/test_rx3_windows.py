@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import shlex
 import subprocess
 import tempfile
 import unittest
@@ -19,6 +20,7 @@ from windows.rx3_windows import (
     HANDOFF_REPO_URL,
     HANDOFF_REQUIRED_FILES,
     SMOKE_TEST_SCRIPT,
+    USB1_ALLOWED_ROOT_ENV,
     USB1_SOURCE_ENV,
     BootstrapError,
     Options,
@@ -110,7 +112,9 @@ class BootstrapUsbSourceTest(unittest.TestCase):
     def test_wsl_path_rejects_relative_path(self) -> None:
         with self.assertRaises(BootstrapError) as ctx:
             _wsl_path_from_windows("relative\\folder")
-        self.assertIn("must be absolute", str(ctx.exception))
+        message = str(ctx.exception)
+        self.assertIn("must be absolute", message)
+        self.assertIn("relative", message)
 
     def test_sync_usb1_source_rsyncs_existing_folder(self) -> None:
         runner = FakeRunner()
@@ -120,13 +124,64 @@ class BootstrapUsbSourceTest(unittest.TestCase):
             sync_usb1_source(runner, str(source))
         command = runner.calls[0][0][-1]
         self.assertIn("rsync -a --delete", command)
+        self.assertIn("--max-size=1G", command)
+        self.assertIn("timeout 600", command)
         self.assertIn("~/rx3/usb1/Music/", command)
+
+    def test_sync_usb1_source_quotes_shell_metacharacters(self) -> None:
+        runner = FakeRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "music'; echo pwned"
+            source.mkdir()
+            sync_usb1_source(runner, str(source))
+        command = runner.calls[0][0][-1]
+        tokens = shlex.split(command)
+        # The malicious words must not appear as separate shell tokens.
+        self.assertNotIn("echo", tokens)
+        self.assertNotIn("pwned", tokens)
+        # The rsync source must be a single quoted token equal to the WSL path.
+        expected_src = _wsl_path_from_windows(str(source)) + "/"
+        source_tokens = [t for t in tokens if t.startswith("/mnt/")]
+        self.assertEqual(source_tokens, [expected_src])
 
     def test_sync_usb1_source_fails_when_folder_missing(self) -> None:
         runner = FakeRunner()
         with self.assertRaises(BootstrapError) as ctx:
             sync_usb1_source(runner, r"C:\nonexistent\folder")
-        self.assertIn("USB1 source folder does not exist", str(ctx.exception))
+        message = str(ctx.exception)
+        self.assertIn("USB1 source folder does not exist", message)
+        self.assertIn("C:", message)
+
+    def test_sync_usb1_source_rejects_file_path(self) -> None:
+        runner = FakeRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            source_file = Path(tmp) / "music.txt"
+            source_file.write_text("not a folder")
+            with self.assertRaises(BootstrapError) as ctx:
+                sync_usb1_source(runner, str(source_file))
+        self.assertIn("must be a directory", str(ctx.exception))
+
+    def test_sync_usb1_source_rejects_parent_traversal(self) -> None:
+        runner = FakeRunner()
+        with self.assertRaises(BootstrapError) as ctx:
+            sync_usb1_source(runner, r"C:\Music\..\Windows")
+        self.assertIn("must not traverse parents", str(ctx.exception))
+
+    def test_sync_usb1_source_honors_allowed_root_env(self) -> None:
+        runner = FakeRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            allowed = Path(tmp) / "allowed"
+            allowed.mkdir()
+            allowed_sub = allowed / "sub"
+            allowed_sub.mkdir()
+            outside = Path(tmp) / "outside"
+            outside.mkdir()
+            with patch.dict("os.environ", {USB1_ALLOWED_ROOT_ENV: str(allowed)}):
+                sync_usb1_source(runner, str(allowed_sub))
+            with self.assertRaises(BootstrapError) as ctx:
+                with patch.dict("os.environ", {USB1_ALLOWED_ROOT_ENV: str(allowed)}):
+                    sync_usb1_source(runner, str(outside))
+        self.assertIn("outside allowed root", str(ctx.exception))
 
     def test_plan_appends_sync_stage_when_source_configured(self) -> None:
         options = Options(check_only=False, no_run=False, no_usb=False, skip_download=False, usb1_source=r"C:\Music")
