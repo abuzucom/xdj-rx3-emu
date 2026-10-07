@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Fresh boot, wait for the control adapter, then: insert stick, play track A, measure pitch; swap stick; eject.
-cd ~/rx3
+cd "${RX3_RUN_DIR:-$HOME/rx3}"
 BRIDGE_SRC="${RX3_BRIDGE_SRC:-./rx3_bridge.py}"
 if [ -f "$BRIDGE_SRC" ]; then
   if [ ! -f rx3_bridge.py ] || [ "$(realpath "$BRIDGE_SRC")" != "$(realpath rx3_bridge.py)" ]; then
@@ -53,5 +53,5 @@ send(0x32, b'eject usb1'); pump(6); tap(0x201); pump(3); shot('source_after_ejec
 PY
 echo "--- audio device:"; grep -i 'audioDevice\|OVER_SAMPLING' player.log | head -3
 echo "--- peaks:"; tail -2 rootfs/tmp/rx3-audio-peaks
-python3 ~/rx3/pitch.py
+python3 "${RX3_RUN_DIR:-$HOME/rx3}/pitch.py"
 grep -i 'usb' bridge.log | tail -5

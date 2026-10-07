@@ -395,8 +395,8 @@ def connect_bridge_socket(
         if sock is not None:
             try:
                 sock.close()
-            except OSError:
-                pass
+            except OSError as exc:
+                logging.warning("Failed to close bridge socket: %s", exc)
 
 
 def _handle_handshake(sock: socket.socket, start_time: float, timeout: float) -> bool:
@@ -405,8 +405,11 @@ def _handle_handshake(sock: socket.socket, start_time: float, timeout: float) ->
     received_screen = False
 
     while time.time() - start_time < timeout:
+        remaining = timeout - (time.time() - start_time)
+        if remaining <= 0:
+            return False
         try:
-            frame = read_frame(sock)
+            frame = read_frame(sock, timeout=remaining)
             if frame is None:
                 break
             msg_type, payload = frame
