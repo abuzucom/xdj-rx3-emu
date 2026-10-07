@@ -37,7 +37,6 @@ WSL_PACKAGE_COMMANDS = {
     "rsync": "rsync",
     "qemu-arm": "qemu-user",
     "mformat": "mtools",
-    "clang": "clang",
     "git": "git",
     "tar": "tar",
     "unzip": "unzip",
