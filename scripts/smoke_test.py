@@ -328,22 +328,10 @@ class MockBridgeServer:
     def __exit__(self, *args: object) -> None:
         self.stop()
 
-    @staticmethod
-    def _create_listen_socket(port: int) -> tuple[socket.socket, int]:
-        """Create a bound listening socket and transfer ownership to the caller."""
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        try:
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            sock.bind(("127.0.0.1", port))
-            sock.listen(1)
-            return sock, sock.getsockname()[1]
-        except Exception:
-            sock.close()
-            raise
-
     def start(self) -> None:
         """Start listening on the configured port."""
-        self.server_socket, self.port = self._create_listen_socket(self.port)
+        self.server_socket = socket.create_server(("127.0.0.1", self.port), backlog=1)
+        self.port = self.server_socket.getsockname()[1]
         self.running = True
         self.thread = threading.Thread(target=self._serve, daemon=True)
         try:
