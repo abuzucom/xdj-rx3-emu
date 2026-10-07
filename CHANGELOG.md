@@ -55,6 +55,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Reset mock bridge state when startup fails so bind and thread errors release the listening socket.
 - Close the mock bridge listening socket directly on startup failure so failed starts cannot leak it.
 - Move mock bridge listen-socket creation into a factory helper that transfers ownership on success or closes on failure.
+- Create the mock bridge listening socket with `socket.create_server` to remove the raw `socket.socket` call from user code.
 - Run `wsl/test-e2e.sh` with `set -euo pipefail` and tolerate absent diagnostic logs.
 
 ## [0.2.1] (2026-10-03)
