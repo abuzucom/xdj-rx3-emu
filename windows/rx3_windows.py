@@ -10,6 +10,7 @@ is idempotent and safe to re-run.
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import subprocess
 import sys
@@ -48,6 +49,7 @@ WSL_INSTALL_HINT = (
     "reboot, install Ubuntu from the Microsoft Store, then run this again"
 )
 ARMEL_WRAPPER_BODY = '#!/bin/sh\nexec "$(ls "$HOME/rx3/tc-armel/bin/"*-gcc | head -n 1)" "$@"\n'
+USB1_SOURCE_ENV = "RX3_USB1_SOURCE"
 FETCH_MARKERS = ("~/rx3/proot", "~/rx3/tc-armel", "~/rx3/rx3-handoff/extracted/runtime-files")
 BUILD_MARKER = "~/rx3/rootfs/root/pdj/rbp-pi"
 BRIDGE_ADDRESS = "127.0.0.1:4480"
@@ -68,6 +70,7 @@ class Options:
     no_run: bool
     no_usb: bool
     skip_download: bool
+    usb1_source: str | None
 
 
 @dataclass
@@ -233,6 +236,33 @@ def seed_usb_stick(runner: CommandRunner) -> None:
     require_success(result, "make-usb.sh", "Check the chroot build output")
 
 
+def _resolve_usb1_source(options: Options) -> str | None:
+    """Return the configured Windows source path for USB1, or None if unset."""
+    return options.usb1_source or os.environ.get(USB1_SOURCE_ENV)
+
+
+def _wsl_path_from_windows(windows_path: str) -> str:
+    """Translate a Windows absolute path to a WSL /mnt path."""
+    p = Path(windows_path)
+    if not p.is_absolute():
+        raise BootstrapError(f"USB source path must be absolute: {windows_path}")
+    drive = p.drive.replace(":", "").lower()
+    return "/mnt/" + drive + "/" + "/".join(p.parts[1:])
+
+
+def sync_usb1_source(runner: CommandRunner, windows_source: str) -> None:
+    """Sync the configured Windows music folder into the WSL virtual USB1 stick."""
+    if not Path(windows_source).exists():
+        raise BootstrapError(
+            f"USB1 source folder does not exist: {windows_source}. "
+            "Create it and add music, or unset RX3_USB1_SOURCE to skip this phase."
+        )
+    wsl_src = _wsl_path_from_windows(windows_source)
+    command = f"mkdir -p ~/rx3/usb1/Music && rsync -a --delete --exclude='.*' '{wsl_src}/' ~/rx3/usb1/Music/"
+    result = runner.run(wsl_script(command))
+    require_success(result, "USB1 music sync", "Check the source path and that rsync is installed in WSL")
+
+
 def launch_emulator(runner: CommandRunner) -> None:
     """Start the player and bridge in a new console window."""
     runner.launch(["wsl.exe", "bash", "-lc", "cd ~/rx3 && exec bash run-rx3.sh"])
@@ -254,6 +284,9 @@ def build_phase_plan(options: Options) -> list[tuple[str, PhaseAction]]:
     ]
     if not options.no_usb:
         plan.append(("Seed virtual USB stick", seed_usb_stick))
+        usb_source = _resolve_usb1_source(options)
+        if usb_source:
+            plan.append(("Sync USB1 music", lambda runner: sync_usb1_source(runner, usb_source)))
     if not options.no_run:
         plan.append(("Launch emulator", launch_emulator))
     return plan
@@ -270,8 +303,20 @@ def parse_args(argv: Sequence[str] | None = None) -> Options:
         action="store_true",
         help="require a local firmware zip instead of downloading it",
     )
+    parser.add_argument(
+        "--usb1-source",
+        metavar="PATH",
+        default=None,
+        help="Windows folder to sync into the virtual USB1 stick (also via RX3_USB1_SOURCE env var)",
+    )
     args = parser.parse_args(argv)
-    return Options(check_only=args.check_only, no_run=args.no_run, no_usb=args.no_usb, skip_download=args.skip_download)
+    return Options(
+        check_only=args.check_only,
+        no_run=args.no_run,
+        no_usb=args.no_usb,
+        skip_download=args.skip_download,
+        usb1_source=args.usb1_source,
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:

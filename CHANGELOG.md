@@ -6,6 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 One deviation applies. A version heading parenthesizes the release date.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] (2026-10-07)
+
+### Added
+- `windows/rx3_windows.py` supports syncing a Windows music folder into the virtual USB1 stick via `RX3_USB1_SOURCE` or `--usb1-source`.
+- `.env.example` documents the `RX3_USB1_SOURCE` environment variable.
+- `docs/running.md` describes the virtual USB music folder, environment variable, and command-line switch.
+
+### Fixed
+- `tests/test_rx3_windows.py` covers USB1 source resolution, WSL path translation, rsync invocation, and plan assembly.
+
 ## [0.4.0] (2026-10-07)
 
 ### Added

@@ -3,8 +3,11 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from windows.rx3_windows import (
@@ -16,8 +19,11 @@ from windows.rx3_windows import (
     HANDOFF_REPO_URL,
     HANDOFF_REQUIRED_FILES,
     SMOKE_TEST_SCRIPT,
+    USB1_SOURCE_ENV,
     BootstrapError,
     Options,
+    _resolve_usb1_source,
+    _wsl_path_from_windows,
     acquire_firmware_archive,
     build_phase_plan,
     build_rootfs,
@@ -29,6 +35,7 @@ from windows.rx3_windows import (
     main,
     seed_usb_stick,
     stage_wsl_files,
+    sync_usb1_source,
 )
 
 
@@ -74,7 +81,66 @@ class FakeRunner:
 
 
 def _default_options() -> Options:
-    return Options(check_only=False, no_run=False, no_usb=False, skip_download=False)
+    return Options(check_only=False, no_run=False, no_usb=False, skip_download=False, usb1_source=None)
+
+
+class BootstrapUsbSourceTest(unittest.TestCase):
+    """Cover the USB1 source sync stage."""
+
+    def test_resolve_usb1_source_prefers_argument_over_env(self) -> None:
+        with patch.dict("os.environ", {USB1_SOURCE_ENV: r"C:\env\music"}):
+            options = Options(check_only=False, no_run=False, no_usb=False, skip_download=False, usb1_source=r"C:\arg\music")
+            self.assertEqual(_resolve_usb1_source(options), r"C:\arg\music")
+
+    def test_resolve_usb1_source_falls_back_to_env(self) -> None:
+        with patch.dict("os.environ", {USB1_SOURCE_ENV: r"C:\env\music"}):
+            options = Options(check_only=False, no_run=False, no_usb=False, skip_download=False, usb1_source=None)
+            self.assertEqual(_resolve_usb1_source(options), r"C:\env\music")
+
+    def test_resolve_usb1_source_returns_none_when_unset(self) -> None:
+        with patch.dict("os.environ", {}, clear=True):
+            self.assertIsNone(_resolve_usb1_source(_default_options()))
+
+    def test_wsl_path_translates_windows_drive_path(self) -> None:
+        self.assertEqual(_wsl_path_from_windows(r"C:\Music\140"), "/mnt/c/Music/140")
+
+    def test_wsl_path_translates_path_with_spaces(self) -> None:
+        self.assertEqual(_wsl_path_from_windows(r"C:\My Music\140"), "/mnt/c/My Music/140")
+
+    def test_wsl_path_rejects_relative_path(self) -> None:
+        with self.assertRaises(BootstrapError) as ctx:
+            _wsl_path_from_windows("relative\\folder")
+        self.assertIn("must be absolute", str(ctx.exception))
+
+    def test_sync_usb1_source_rsyncs_existing_folder(self) -> None:
+        runner = FakeRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "music"
+            source.mkdir()
+            sync_usb1_source(runner, str(source))
+        command = runner.calls[0][0][-1]
+        self.assertIn("rsync -a --delete", command)
+        self.assertIn("~/rx3/usb1/Music/", command)
+
+    def test_sync_usb1_source_fails_when_folder_missing(self) -> None:
+        runner = FakeRunner()
+        with self.assertRaises(BootstrapError) as ctx:
+            sync_usb1_source(runner, r"C:\nonexistent\folder")
+        self.assertIn("USB1 source folder does not exist", str(ctx.exception))
+
+    def test_plan_appends_sync_stage_when_source_configured(self) -> None:
+        options = Options(check_only=False, no_run=False, no_usb=False, skip_download=False, usb1_source=r"C:\Music")
+        titles = [title for title, _ in build_phase_plan(options)]
+        self.assertIn("Sync USB1 music", titles)
+
+    def test_plan_omits_sync_stage_when_source_unset(self) -> None:
+        titles = [title for title, _ in build_phase_plan(_default_options())]
+        self.assertNotIn("Sync USB1 music", titles)
+
+    def test_no_usb_drops_sync_stage(self) -> None:
+        options = Options(check_only=False, no_run=False, no_usb=True, skip_download=False, usb1_source=r"C:\Music")
+        titles = [title for title, _ in build_phase_plan(options)]
+        self.assertNotIn("Sync USB1 music", titles)
 
 
 class BootstrapEnvironmentTest(unittest.TestCase):
@@ -174,7 +240,7 @@ class BootstrapStagingTest(unittest.TestCase):
 
     def test_firmware_phase_honors_skip_download(self) -> None:
         runner = FakeRunner()
-        options = Options(check_only=False, no_run=False, no_usb=False, skip_download=True)
+        options = Options(check_only=False, no_run=False, no_usb=False, skip_download=True, usb1_source=None)
         acquire_firmware_archive(runner, options)
         self.assertNotIn("--download", runner.calls[0][0])
 
@@ -220,7 +286,7 @@ class BootstrapPlanTest(unittest.TestCase):
     """Cover phase list assembly and the main entry point."""
 
     def test_check_only_plan_has_single_phase(self) -> None:
-        options = Options(check_only=True, no_run=False, no_usb=False, skip_download=False)
+        options = Options(check_only=True, no_run=False, no_usb=False, skip_download=False, usb1_source=None)
         plan = build_phase_plan(options)
         self.assertEqual(len(plan), 1)
 
@@ -230,7 +296,7 @@ class BootstrapPlanTest(unittest.TestCase):
         self.assertEqual(plan[0][0], "Check environment")
 
     def test_no_run_and_no_usb_drop_phases(self) -> None:
-        options = Options(check_only=False, no_run=True, no_usb=True, skip_download=False)
+        options = Options(check_only=False, no_run=True, no_usb=True, skip_download=False, usb1_source=None)
         titles = [title for title, _ in build_phase_plan(options)]
         self.assertNotIn("Launch emulator", titles)
         self.assertNotIn("Seed virtual USB stick", titles)
