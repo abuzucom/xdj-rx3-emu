@@ -39,6 +39,7 @@ Command-line switches shape the run:
 - `rx3.cmd --no-run` bootstraps without launching the emulator.
 - `rx3.cmd --no-usb` skips the virtual USB seeding.
 - `rx3.cmd --skip-download` requires a local `firmware/XDJ-RX3_v120.zip` instead of downloading it.
+- `rx3.cmd --usb1-source "PATH"` syncs a Windows music folder into the virtual USB1 stick. Also set via the `RX3_USB1_SOURCE` environment variable.
 
 Every phase is idempotent. Re-run `rx3.cmd` after a failure. The plan skips finished phases.
 
@@ -53,7 +54,8 @@ Every phase is idempotent. Re-run `rx3.cmd` after a failure. The plan skips fini
 | Fetch recovery inputs | Runs `rx3_fetch.sh` to fetch proot, the armel toolchain, and the firmware recovery. |
 | Create armel-gcc wrapper | Writes the cross-compiler wrapper the build expects. |
 | Build chroot | Assembles `~/rx3/rootfs` and builds the shims. |
-| Seed virtual USB stick | Creates `~/rx3/usb1` with test tones. |
+| Seed virtual USB stick | Creates `~/rx3/usb1` with test tones and a fake block device. |
+| Sync USB1 music | If `RX3_USB1_SOURCE` or `--usb1-source` is set, rsyncs that folder into the stick. |
 | Launch emulator | Starts the player and the bridge in a new console window. |
 
 ## Firmware details
@@ -104,7 +106,27 @@ Replace `/mnt/c/path/to/repo` with the real repository location.
 | `RX3_RUN_DIR` | `~/rx3` | Working directory for `wsl/test-e2e.sh`. |
 | `RX3_BRIDGE_SRC` | `./rx3_bridge.py` | Bridge source copied by `wsl/test-e2e.sh`. |
 | `RX3_USB_ROOT` | `/mnt/c/rx3_usb` | Windows-side root for virtual USB stick folders in the e2e test. |
+| `RX3_USB1_SOURCE` | unset | Windows folder to sync into the virtual USB1 stick. Quote paths with spaces. |
 | `RX3_SHOT_DIR` | `.` | Screenshot output directory for the e2e test. |
+
+## Virtual USB music folder
+
+Set `RX3_USB1_SOURCE` to a Windows folder containing MP3, WAV, AIFF, or FLAC files. The bootstrap rsyncs that folder into the virtual USB1 stick before launch. Use an absolute path. If the path contains spaces, quote it.
+
+Example with an environment variable:
+
+```powershell
+$env:RX3_USB1_SOURCE = "C:\Music\Techno"
+.\rx3.cmd
+```
+
+Example with the command-line switch:
+
+```powershell
+.\rx3.cmd --usb1-source "C:\Music\Techno"
+```
+
+The sync is one-way: your folder is never modified. The firmware's own writes (track analysis, settings) stay inside the WSL copy. Add or remove tracks later by re-running `rx3.cmd`. Copy `.env.example` to `.env` and set `RX3_USB1_SOURCE` there to make the value persistent.
 
 ## Connecting a client
 
