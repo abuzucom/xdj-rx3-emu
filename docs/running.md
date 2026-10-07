@@ -107,6 +107,7 @@ Replace `/mnt/c/path/to/repo` with the real repository location.
 | `RX3_BRIDGE_SRC` | `./rx3_bridge.py` | Bridge source copied by `wsl/test-e2e.sh`. |
 | `RX3_USB_ROOT` | `/mnt/c/rx3_usb` | Windows-side root for virtual USB stick folders in the e2e test. |
 | `RX3_USB1_SOURCE` | unset | Windows folder to sync into the virtual USB1 stick. Quote paths with spaces. |
+| `RX3_USB1_ALLOWED_ROOT` | unset | Optional. If set, the source path must resolve under this folder. |
 | `RX3_SHOT_DIR` | `.` | Screenshot output directory for the e2e test. |
 
 ## Virtual USB music folder
@@ -127,6 +128,8 @@ Example with the command-line switch:
 ```
 
 The sync is one-way: your folder is never modified. The firmware's own writes (track analysis, settings) stay inside the WSL copy. Add or remove tracks later by re-running `rx3.cmd`. Copy `.env.example` to `.env` and set `RX3_USB1_SOURCE` there to make the value persistent.
+
+For extra control, set `RX3_USB1_ALLOWED_ROOT` to a parent folder; the source path must then resolve inside it.
 
 ## Connecting a client
 

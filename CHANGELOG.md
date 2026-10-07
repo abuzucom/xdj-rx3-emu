@@ -14,7 +14,10 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - `docs/running.md` describes the virtual USB music folder, environment variable, and command-line switch.
 
 ### Fixed
-- `tests/test_rx3_windows.py` covers USB1 source resolution, WSL path translation, rsync invocation, and plan assembly.
+- Hardened `sync_usb1_source()` against shell injection by passing the WSL source path through `shlex.quote()`.
+- Validated `RX3_USB1_SOURCE` as an absolute directory, rejected parent-traversal components, and added optional `RX3_USB1_ALLOWED_ROOT` confinement.
+- Bounded the USB1 sync with `rsync --max-size=1G` and a WSL `timeout 600` to limit resource exhaustion.
+- `tests/test_rx3_windows.py` covers USB1 source resolution, WSL path translation, shell escaping, validation failures, allowed-root enforcement, rsync bounds, and plan assembly.
 
 ## [0.4.0] (2026-10-07)
 
