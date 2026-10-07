@@ -26,6 +26,10 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Allowed `smoketest.yml` to proceed when the firmware cache is absent so pull-request checks do not require a pre-seeded cache.
 - Switched firmware download from `urllib.request` to `http.client.HTTPSConnection` and replaced builtin `open` with `Path.open()` to satisfy Ruff checks.
 - Replaced `socket.timeout` with `TimeoutError` in smoke test exception handlers.
+- Hardened archive extraction by opening target files relative to the output directory file descriptor, guarding file descriptor lifecycles, and preserving the atomic `O_NOFOLLOW` behavior.
+- Turned `connect_bridge_socket` into a context manager that closes the socket on exit and narrowed retry logic to `ConnectionRefusedError`.
+- Cleaned up temporary firmware downloads only on failure so a successful download is never unlinked before renaming.
+- Reset `server_socket` before closing the listening socket when the bridge thread fails to start.
 - Enclosed test and client sockets in context managers to guarantee resource release.
 - Added path traversal, symlink, and decompression size limit validation on archives.
 - Bound client and server protocol frame sizes to 1 MiB in `scripts/smoke_test.py`.

@@ -85,9 +85,9 @@ class SmokeTestBridgeProtocolTest(unittest.TestCase):
                     self.assertIsNone(result)
 
     def test_connect_bridge_socket_failure_cleanup(self) -> None:
-        """Verify connect_bridge_socket returns None cleanly without leaking sockets."""
-        sock = connect_bridge_socket("127.0.0.1", port=1, timeout=0.1)
-        self.assertIsNone(sock)
+        """Verify connect_bridge_socket yields None cleanly without leaking sockets."""
+        with connect_bridge_socket("127.0.0.1", port=1, timeout=0.1) as sock:
+            self.assertIsNone(sock)
 
     def test_handshake_rejects_truncated_screen_info(self) -> None:
         """Verify _handle_handshake cleanly handles 0x10 frame shorter than 4 bytes."""
