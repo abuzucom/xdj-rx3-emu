@@ -11,7 +11,7 @@ virtual USB sticks to client programs.
 - Python 3 on Windows with the `py` launcher.
 - Windows `tar.exe` at `C:\Windows\System32\tar.exe`.
 - About 2 GB of free disk space in the WSL home.
-- WSL packages: `python3 curl rsync qemu-user mtools clang git tar unzip p7zip-full`.
+- WSL packages: `python3 curl rsync qemu-user mtools git tar unzip p7zip-full`.
 
 Install WSL from an elevated PowerShell when missing:
 
@@ -24,7 +24,7 @@ A reboot follows. Install Ubuntu from the Microsoft Store afterward.
 Install the WSL packages inside the distribution:
 
 ```
-sudo apt-get update && sudo apt-get install -y python3 curl rsync qemu-user mtools clang git tar unzip p7zip-full
+sudo apt-get update && sudo apt-get install -y python3 curl rsync qemu-user mtools git tar unzip p7zip-full
 ```
 
 ## Quick start

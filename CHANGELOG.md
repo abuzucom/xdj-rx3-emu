@@ -16,6 +16,10 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - `.gitattributes` CRLF exception for `*.cmd` batch files.
 
 ### Fixed
+- `wsl/rx3_fetch.sh` pins SHA-256 hashes for the proot binary and the cross toolchain, verifies downloads, and re-downloads on hash mismatch.
+- `wsl/rx3_fetch.sh` switches the cross toolchain to Bootlin `armv7-eabihf--glibc--stable-2024.05-1` because Bootlin removed the soft-float `armv7-eabi` release and the old URL returns 404.
+- Removed the unused `clang` WSL package requirement from the bootstrap probe and `docs/running.md`. No build step invokes clang.
+- Corrected the `actions/cache` pin comments in `smoketest.yml` and `seed-firmware-cache.yml` to `v6.1.0`, matching the pinned commit.
 - `wsl/test-e2e.sh` calls `measure-pitch.py` instead of the missing `pitch.py`.
 - README setup and run sections point to `docs/running.md` and document the smoke test utility.
 - `docs/development.md` lists the smoke test and bootstrap commands.
