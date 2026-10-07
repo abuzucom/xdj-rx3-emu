@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import socket
 import struct
 import tempfile
@@ -130,8 +131,6 @@ class SmokeTestBridgeProtocolTest(unittest.TestCase):
             sample_file = Path(tmp_dir) / "sample.bin"
             sample_data = b"XDJ-RX3-TEST-PAYLOAD"
             sample_file.write_bytes(sample_data)
-            import hashlib
-
             expected = hashlib.sha256(sample_data).hexdigest()
             self.assertEqual(compute_file_sha256(sample_file), expected)
 
@@ -139,9 +138,8 @@ class SmokeTestBridgeProtocolTest(unittest.TestCase):
         """Verify download_firmware validates SHA-256 and rejects hash mismatches."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             dest_file = Path(tmp_dir) / "test.zip"
+            tmp_file = dest_file.with_suffix(".tmp")
             payload = b"MOCK_FIRMWARE_BINARY_DATA"
-            import hashlib
-
             expected_hash = hashlib.sha256(payload).hexdigest()
 
             from unittest.mock import MagicMock, patch
@@ -163,9 +161,10 @@ class SmokeTestBridgeProtocolTest(unittest.TestCase):
                 # Reset the response side_effect for the next call.
                 mock_resp.read.side_effect = [payload, b""]
 
-                # Invalid hash raises ValueError
+                # Invalid hash raises ValueError and removes the partial download
                 with self.assertRaises(ValueError):
                     download_firmware("https://example.com/fw.zip", dest_file, expected_sha256="badhash")
+                self.assertFalse(tmp_file.exists())
 
     def test_acquire_firmware_existing_archive(self) -> None:
         """Verify acquire_firmware uses existing archive when SHA-256 matches."""
@@ -174,8 +173,6 @@ class SmokeTestBridgeProtocolTest(unittest.TestCase):
             archive = fw_dir / FIRMWARE_ARCHIVE_NAME
             payload = b"MOCK_ARCHIVE_DATA"
             archive.write_bytes(payload)
-            import hashlib
-
             valid_hash = hashlib.sha256(payload).hexdigest()
 
             result = acquire_firmware(fw_dir, url="http://example.com/fw.zip", expected_sha256=valid_hash)
@@ -252,6 +249,7 @@ class SmokeTestBridgeProtocolTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             dest_file = Path(tmp_dir) / "oversized.zip"
+            tmp_file = dest_file.with_suffix(".tmp")
 
             chunk_count = 0
 
@@ -274,6 +272,7 @@ class SmokeTestBridgeProtocolTest(unittest.TestCase):
                 with self.assertRaises(ValueError) as ctx:
                     download_firmware("https://example.com/huge.zip", dest_file)
                 self.assertIn("exceeded maximum allowed limit", str(ctx.exception))
+                self.assertFalse(tmp_file.exists())
 
     def test_prepare_firmware_rejects_parent_dir_traversal(self) -> None:
         """Verify prepare_firmware rejects zip entries with relative traversal in name."""

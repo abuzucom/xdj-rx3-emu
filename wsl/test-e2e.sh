@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # Fresh boot, wait for the control adapter, then: insert stick, play track A, measure pitch; swap stick; eject.
+# RX3_* environment variables are operator-controlled local test inputs and stay
+# outside any untrusted archive or network data path.
+set -euo pipefail
 cd "${RX3_RUN_DIR:-$HOME/rx3}"
 BRIDGE_SRC="${RX3_BRIDGE_SRC:-./rx3_bridge.py}"
 if [ -f "$BRIDGE_SRC" ]; then
@@ -7,7 +10,7 @@ if [ -f "$BRIDGE_SRC" ]; then
     tr -d '\r' < "$BRIDGE_SRC" > rx3_bridge.py
   fi
 fi
-pkill -f rx3_bridge.py; pkill -f 'rbp-pi -a'; sleep 1
+pkill -f rx3_bridge.py || true; pkill -f 'rbp-pi -a' || true; sleep 1
 (RX3_TIMEOUT=600 ./run-rx3.sh > bridge.log 2>&1 &)
 for i in $(seq 1 120); do grep -q 'RX3 control adapter ready' player.log 2>/dev/null && break; sleep 2; done
 grep -q 'RX3 control adapter ready' player.log && echo "control adapter ready after ~$((i*2)) s" || { echo "control adapter never ready"; exit 1; }
@@ -51,7 +54,7 @@ send(0x32, b'eject usb1'); send(0x32, b'insert usb1 ' + base + br'\Second'); pum
 tap(0x201); pump(3); shot('source_after_swap'); touch(400,144); pump(3); shot('list_after_swap')
 send(0x32, b'eject usb1'); pump(6); tap(0x201); pump(3); shot('source_after_eject')
 PY
-echo "--- audio device:"; grep -i 'audioDevice\|OVER_SAMPLING' player.log | head -3
-echo "--- peaks:"; tail -2 rootfs/tmp/rx3-audio-peaks
+echo "--- audio device:"; grep -i 'audioDevice\|OVER_SAMPLING' player.log | head -3 || true
+echo "--- peaks:"; tail -2 rootfs/tmp/rx3-audio-peaks || true
 python3 "${RX3_RUN_DIR:-$HOME/rx3}/pitch.py"
-grep -i 'usb' bridge.log | tail -5
+grep -i 'usb' bridge.log | tail -5 || true

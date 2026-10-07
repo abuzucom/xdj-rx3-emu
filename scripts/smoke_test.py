@@ -33,6 +33,7 @@ MAX_FRAME_LENGTH = 1_048_576
 MAX_DOWNLOAD_BYTES = 1_073_741_824
 MAX_EXTRACT_BYTES = 2_147_483_648
 READ_CHUNK_SIZE = 64 * 1024
+OUTPUT_FILE_MODE = 0o644
 TILE_SIZE = 64
 BLACK_OPAQUE_PIXEL = b"\x00\x00\x00\xff"
 DEFAULT_FIRMWARE_URL = (
@@ -60,6 +61,16 @@ def write_frame(sock: socket.socket, msg_type: int, payload: bytes) -> None:
     sock.sendall(hdr + payload)
 
 
+def _apply_read_deadline(sock: socket.socket, deadline: float | None) -> None:
+    """Constrain the next socket read to the remaining deadline budget."""
+    if deadline is None:
+        return
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise TimeoutError("read_frame deadline exceeded")
+    sock.settimeout(remaining)
+
+
 def read_frame(
     sock: socket.socket,
     max_length: int = MAX_FRAME_LENGTH,
@@ -69,11 +80,11 @@ def read_frame(
 
     Returns (msg_type, payload) tuple, or None if socket closed or length invalid.
     """
-    if timeout is not None:
-        sock.settimeout(timeout)
+    deadline = time.monotonic() + timeout if timeout is not None else None
 
     hdr = b""
     while len(hdr) < 5:
+        _apply_read_deadline(sock, deadline)
         chunk = sock.recv(5 - len(hdr))
         if not chunk:
             return None
@@ -86,6 +97,7 @@ def read_frame(
 
     payload = bytearray()
     while len(payload) < length:
+        _apply_read_deadline(sock, deadline)
         chunk = sock.recv(length - len(payload))
         if not chunk:
             return None
@@ -213,6 +225,13 @@ def prepare_firmware(zip_path: Path, output_dir: Path) -> Path:
     resolved_out = output_dir.resolve()
 
     with zipfile.ZipFile(zip_path, "r") as zf:
+        for entry in zf.infolist():
+            entry_path = Path(entry.filename)
+            if entry_path.is_absolute() or ".." in entry_path.parts:
+                raise ValueError(f"Archive entry {entry.filename} contains invalid path traversal")
+            if is_zip_symlink(entry):
+                raise ValueError(f"Archive entry {entry.filename} is a symlink")
+
         names = zf.namelist()
         if UPD_FILENAME in names:
             payload_name = UPD_FILENAME
@@ -224,13 +243,8 @@ def prepare_firmware(zip_path: Path, output_dir: Path) -> Path:
             payload_name = exe_candidates[0]
             min_bytes = 1_000_000
 
-        if Path(payload_name).is_absolute() or ".." in Path(payload_name).parts:
-            raise ValueError(f"Archive entry {payload_name} contains invalid path traversal")
-
         clean_name = Path(payload_name).name
         info = zf.getinfo(payload_name)
-        if is_zip_symlink(info):
-            raise ValueError(f"Archive entry {payload_name} is a symlink")
         if info.file_size > MAX_EXTRACT_BYTES:
             raise ValueError(
                 f"Extracted payload size {info.file_size} exceeds maximum limit of {MAX_EXTRACT_BYTES} bytes"
@@ -245,6 +259,8 @@ def prepare_firmware(zip_path: Path, output_dir: Path) -> Path:
 
         print(f"Extracting {payload_name} ({info.file_size} bytes) to {target_file}...")
         written = 0
+        extract_complete = False
+        target_opened = False
         open_flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
         if hasattr(os, "O_NOFOLLOW"):
             open_flags |= os.O_NOFOLLOW
@@ -254,10 +270,14 @@ def prepare_firmware(zip_path: Path, output_dir: Path) -> Path:
         file_owned_by_fdopen = False
         try:
             if hasattr(os, "O_DIRECTORY"):
-                dir_fd = os.open(output_dir, os.O_RDONLY | os.O_DIRECTORY)
-                fd = os.open(clean_name, open_flags, 0o644, dir_fd=dir_fd)
+                dir_flags = os.O_RDONLY | os.O_DIRECTORY
+                if hasattr(os, "O_NOFOLLOW"):
+                    dir_flags |= os.O_NOFOLLOW
+                dir_fd = os.open(output_dir, dir_flags)
+                fd = os.open(clean_name, open_flags, OUTPUT_FILE_MODE, dir_fd=dir_fd)
             else:
-                fd = os.open(target_file, open_flags, 0o644)
+                fd = os.open(target_file, open_flags, OUTPUT_FILE_MODE)
+            target_opened = True
             file_obj = os.fdopen(fd, "wb", closefd=True)
             file_owned_by_fdopen = True
             with zf.open(payload_name) as src, file_obj as dst:
@@ -271,6 +291,12 @@ def prepare_firmware(zip_path: Path, output_dir: Path) -> Path:
                             f"Extracted payload exceeds maximum allowed limit of {MAX_EXTRACT_BYTES} bytes"
                         )
                     dst.write(chunk)
+            extract_complete = True
+        except Exception:
+            if target_opened and not extract_complete and target_file.is_file() and not target_file.is_symlink():
+                with contextlib.suppress(OSError):
+                    target_file.unlink()
+            raise
         finally:
             if fd != -1 and not file_owned_by_fdopen:
                 os.close(fd)
@@ -316,8 +342,10 @@ class MockBridgeServer:
             self.thread.start()
         except Exception:
             if self.server_socket is sock:
-                self.server_socket = None
-            sock.close()
+                self.stop()
+            else:
+                sock.close()
+            self.thread = None
             raise
 
     def _serve(self) -> None:
@@ -378,16 +406,21 @@ def connect_bridge_socket(
     socket is closed when the with-block exits.
     """
     sock: socket.socket | None = None
-    deadline = time.time() + timeout
-    while time.time() < deadline:
+    deadline = time.monotonic() + timeout
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
         try:
-            sock = socket.create_connection((host, port), timeout=2.0)
+            sock = socket.create_connection((host, port), timeout=min(2.0, remaining))
             break
         except ConnectionRefusedError:
-            if time.time() >= deadline:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
                 break
-            time.sleep(0.5)
-        except OSError:
+            time.sleep(min(0.5, remaining))
+        except OSError as exc:
+            logging.warning("Bridge connection attempt to %s:%d failed: %s", host, port, exc)
             break
     try:
         yield sock
