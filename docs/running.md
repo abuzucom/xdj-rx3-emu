@@ -129,7 +129,7 @@ Example with the command-line switch:
 
 The sync is one-way: your folder is never modified. The firmware's own writes (track analysis, settings) stay inside the WSL copy. Add or remove tracks later by re-running `rx3.cmd`. Copy `.env.example` to `.env` and set `RX3_USB1_SOURCE` there to make the value persistent.
 
-For extra control, set `RX3_USB1_ALLOWED_ROOT` to a parent folder; the source path must then resolve inside it.
+For extra control, set `RX3_USB1_ALLOWED_ROOT` to a parent folder. The source path must then resolve inside that folder. Confinement is enforced in WSL, where rsync runs.
 
 ## Connecting a client
 
