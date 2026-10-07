@@ -33,6 +33,8 @@ MAX_FRAME_LENGTH = 1_048_576
 MAX_DOWNLOAD_BYTES = 1_073_741_824
 MAX_EXTRACT_BYTES = 2_147_483_648
 READ_CHUNK_SIZE = 64 * 1024
+TILE_SIZE = 64
+BLACK_OPAQUE_PIXEL = b"\x00\x00\x00\xff"
 DEFAULT_FIRMWARE_URL = (
     "https://downloads.support.alphatheta.com/firmwares/all-in-one-dj-systems/XDJ-RX3/XDJ-RX3_v120.zip"
 )
@@ -326,26 +328,29 @@ class MockBridgeServer:
             except (TimeoutError, OSError):
                 continue
             with conn:
-                conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-                # Send 0x01 status text
-                write_frame(conn, 0x01, b"bridge connected")
-                # Send 0x10 screen info (1280x800)
-                screen_payload = struct.pack("<HH", SCREEN_WIDTH, SCREEN_HEIGHT)
-                write_frame(conn, 0x10, screen_payload)
-                # Echo loop for client commands
-                conn.settimeout(2.0)
-                while self.running:
-                    try:
-                        frame = read_frame(conn)
-                        if frame is None:
+                try:
+                    conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                    # Send 0x01 status text
+                    write_frame(conn, 0x01, b"bridge connected")
+                    # Send 0x10 screen info (1280x800)
+                    screen_payload = struct.pack("<HH", SCREEN_WIDTH, SCREEN_HEIGHT)
+                    write_frame(conn, 0x10, screen_payload)
+                    # Echo loop for client commands
+                    conn.settimeout(2.0)
+                    while self.running:
+                        try:
+                            frame = read_frame(conn)
+                            if frame is None:
+                                break
+                            msg_type, _ = frame
+                            if msg_type == 0x21:  # full frame request
+                                tile_hdr = struct.pack("<HHHH", 0, 0, TILE_SIZE, TILE_SIZE)
+                                tile_pixels = BLACK_OPAQUE_PIXEL * (TILE_SIZE * TILE_SIZE)
+                                write_frame(conn, 0x11, tile_hdr + tile_pixels)
+                        except (TimeoutError, OSError):
                             break
-                        msg_type, _ = frame
-                        if msg_type == 0x21:  # full frame request
-                            tile_hdr = struct.pack("<HHHH", 0, 0, 64, 64)
-                            tile_pixels = b"\x00\x00\x00\xff" * (64 * 64)
-                            write_frame(conn, 0x11, tile_hdr + tile_pixels)
-                    except (TimeoutError, OSError):
-                        break
+                except (OSError, ValueError) as exc:
+                    logging.warning("Mock bridge client handler error: %s", exc)
 
     def stop(self) -> None:
         """Shut down the mock server."""
@@ -433,12 +438,12 @@ def _handle_handshake(sock: socket.socket, start_time: float, timeout: float) ->
 
 def test_bridge_client(host: str = "127.0.0.1", port: int = DEFAULT_PORT, timeout: float = 10.0) -> bool:
     """Connect to bridge and assert protocol handshake frames."""
-    start_time = time.time()
+    deadline = time.time() + timeout
     with connect_bridge_socket(host, port, timeout) as sock:
         if sock is None:
             print(f"Failed to connect to bridge at {host}:{port} within {timeout}s", file=sys.stderr)
             return False
-        return _handle_handshake(sock, start_time, timeout)
+        return _handle_handshake(sock, time.time(), deadline - time.time())
 
 
 def main() -> int:
