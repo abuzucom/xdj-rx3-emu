@@ -6,6 +6,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 One deviation applies. A version heading parenthesizes the release date.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] (2026-10-07)
+
+### Added
+- `windows/rx3_windows.py` one-click Windows bootstrap and launcher with idempotent phases for environment checks, WSL staging, pinned rx3-handoff fetch, verified firmware acquisition, chroot build, USB seeding, and emulator launch.
+- `rx3.cmd` double-click launcher at the repository root.
+- `tests/test_rx3_windows.py` covers phase logic, command construction, and idempotency.
+- `docs/running.md` operator guide with requirements, quick start, manual setup, environment variables, and troubleshooting.
+- `.gitattributes` CRLF exception for `*.cmd` batch files.
+
+### Fixed
+- `wsl/test-e2e.sh` calls `measure-pitch.py` instead of the missing `pitch.py`.
+- README setup and run sections point to `docs/running.md` and document the smoke test utility.
+- `docs/development.md` lists the smoke test and bootstrap commands.
+
 ## [0.3.0] (2026-10-03)
 
 ### Added

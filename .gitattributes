@@ -18,3 +18,7 @@ docs/agent-policy/*.md text eol=lf
 *.py text eol=lf
 *.c text eol=lf
 *.conf text eol=lf
+
+# cmd.exe batch files need CRLF in the working tree. This is the documented
+# exception to the repository LF rule because cmd.exe misreads LF-only files.
+*.cmd text eol=crlf

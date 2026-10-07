@@ -56,5 +56,5 @@ send(0x32, b'eject usb1'); pump(6); tap(0x201); pump(3); shot('source_after_ejec
 PY
 echo "--- audio device:"; grep -i 'audioDevice\|OVER_SAMPLING' player.log | head -3 || true
 echo "--- peaks:"; tail -2 rootfs/tmp/rx3-audio-peaks || true
-python3 "${RX3_RUN_DIR:-$HOME/rx3}/pitch.py"
+python3 "${RX3_RUN_DIR:-$HOME/rx3}/measure-pitch.py"
 grep -i 'usb' bridge.log | tail -5 || true

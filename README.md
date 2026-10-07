@@ -34,15 +34,20 @@ holds the emulation harness, shims and bridge written for it.
 Known key ids (from the firmware's control device): SOURCE `0x201`, browse rotary `0x420c`, LOAD `0x4311`
 (channel = deck), PLAY `0x4101`, tempo op 5 analog -1..1, jog `0x4305` op 4 ticks (+ zero report).
 
-## Setup (once)
+## Setup and run
 
-1. `wsl/rx3_fetch.sh` - fetches proot, an armv7 toolchain, Pioneer's public XDJ-RX3 update and GPL source
+Double-click `rx3.cmd` on Windows. The bootstrap stages the WSL harness, fetches the pinned rx3-handoff
+recovery tooling, verifies the firmware archive, builds the chroot, seeds a virtual USB stick, and launches
+the player with the bridge. See `docs/running.md` for requirements, the manual setup path, the environment
+variable table, and troubleshooting.
+
+The manual equivalent inside WSL:
+
+1. `wsl/rx3_fetch.sh` fetches proot, an armv7 toolchain, Pioneer's public XDJ-RX3 update and GPL source
    drop, and runs the Rx3-flx4 recovery to unpack the firmware (all into `~/rx3`).
-2. `wsl/build-rootfs-wsl.sh` - assembles the chroot from the recovered firmware and builds the shims
+2. `wsl/build-rootfs-wsl.sh` assembles the chroot from the recovered firmware and builds the shims
    (`wsl-shim.c`, `g2d-shim.c`, `patch_fbshim.py`).
-3. `wsl/make-usb.sh` - optional: seeds `~/rx3/usb1` with test tones.
-
-## Run
+3. `wsl/make-usb.sh` optionally seeds `~/rx3/usb1` with test tones.
 
 ```
 wsl ~/rx3/run-rx3.sh          # boots the player (about a minute) and starts rx3_bridge.py on 4480
@@ -50,6 +55,12 @@ wsl ~/rx3/run-rx3.sh          # boots the player (about a minute) and starts rx3
 Environment: `RX3_NOBRIDGE=1` (player only), `RX3_TIMEOUT=N` (auto-stop after N s).
 `wsl/test-e2e.sh` is an end-to-end check: boot, insert a stick, load and play a track, measure the output
 pitch (`measure-pitch.py`), swap and eject sticks.
+
+## Smoke test utility
+
+`scripts/smoke_test.py` downloads and verifies the `XDJ-RX3_v120.zip` archive against
+`firmware/firmware.sha256`, extracts the payload, and validates the bridge protocol against a mock server.
+CI runs it in `.github/workflows/smoketest.yml`.
 
 ## Virtual USB sticks
 
