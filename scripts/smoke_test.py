@@ -341,11 +341,13 @@ class MockBridgeServer:
             self.thread = threading.Thread(target=self._serve, daemon=True)
             self.thread.start()
         except Exception:
-            if self.server_socket is sock:
-                self.stop()
-            else:
-                sock.close()
+            self.running = False
+            if self.thread is not None and self.thread.is_alive():
+                self.thread.join(timeout=2.0)
             self.thread = None
+            if self.server_socket is sock:
+                self.server_socket = None
+            sock.close()
             raise
 
     def _serve(self) -> None:
