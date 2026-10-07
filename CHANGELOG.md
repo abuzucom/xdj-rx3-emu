@@ -23,6 +23,9 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 - Removed auto-download from CI in `.github/workflows/smoketest.yml` and required workflow storage cache.
+- Allowed `smoketest.yml` to proceed when the firmware cache is absent so pull-request checks do not require a pre-seeded cache.
+- Switched firmware download from `urllib.request` to `http.client.HTTPSConnection` and replaced builtin `open` with `Path.open()` to satisfy Ruff checks.
+- Replaced `socket.timeout` with `TimeoutError` in smoke test exception handlers.
 - Enclosed test and client sockets in context managers to guarantee resource release.
 - Added path traversal, symlink, and decompression size limit validation on archives.
 - Bound client and server protocol frame sizes to 1 MiB in `scripts/smoke_test.py`.
@@ -30,6 +33,11 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Added per-read timeout handling to `read_frame`.
 - `wsl/test-e2e.sh` imports `os` and parameterizes bridge and screenshot paths.
 - `wsl/measure-pitch.py` guards divisions against zero on silent audio buffers.
+- Allocate ephemeral TCP ports dynamically (`MockBridgeServer(port=0)`) in tests.
+- Manage client socket lifecycle via `connect_bridge_socket` and context blocks.
+- Raise `SystemExit(130)` on `KeyboardInterrupt` in `mock-server` action.
+- Atomically refuse symlinks during archive extraction with `os.O_NOFOLLOW`.
+- Compare canonical file paths in `wsl/test-e2e.sh` to prevent self-truncation.
 
 ## [0.2.1] (2026-10-03)
 

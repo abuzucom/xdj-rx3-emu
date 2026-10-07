@@ -43,12 +43,10 @@ class SmokeTestBridgeProtocolTest(unittest.TestCase):
 
     def test_mock_bridge_handshake(self) -> None:
         """Verify mock bridge server emits protocol frames and client asserts them."""
-        # Use port 4485 to avoid conflicts
-        test_port = 4485
-        server = MockBridgeServer(port=test_port)
+        server = MockBridgeServer(port=0)
         server.start()
         try:
-            success = test_bridge_client(host="127.0.0.1", port=test_port, timeout=5.0)
+            success = test_bridge_client(host="127.0.0.1", port=server.port, timeout=5.0)
             self.assertTrue(success, "Bridge client failed to complete handshake")
         finally:
             server.stop()
@@ -133,6 +131,7 @@ class SmokeTestBridgeProtocolTest(unittest.TestCase):
             sample_data = b"XDJ-RX3-TEST-PAYLOAD"
             sample_file.write_bytes(sample_data)
             import hashlib
+
             expected = hashlib.sha256(sample_data).hexdigest()
             self.assertEqual(compute_file_sha256(sample_file), expected)
 
@@ -142,20 +141,31 @@ class SmokeTestBridgeProtocolTest(unittest.TestCase):
             dest_file = Path(tmp_dir) / "test.zip"
             payload = b"MOCK_FIRMWARE_BINARY_DATA"
             import hashlib
+
             expected_hash = hashlib.sha256(payload).hexdigest()
 
-            import io
-            from unittest.mock import patch
+            from unittest.mock import MagicMock, patch
 
-            with patch("urllib.request.urlopen", side_effect=lambda req, timeout=60.0: io.BytesIO(payload)):
+            mock_conn = MagicMock()
+            mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+            mock_conn.__exit__ = MagicMock(return_value=False)
+            mock_resp = MagicMock()
+            mock_resp.status = 200
+            mock_resp.read.side_effect = [payload, b""]
+            mock_conn.getresponse.return_value = mock_resp
+
+            with patch("http.client.HTTPSConnection", return_value=mock_conn):
                 # Valid hash matches
-                download_firmware("http://example.com/fw.zip", dest_file, expected_sha256=expected_hash)
+                download_firmware("https://example.com/fw.zip", dest_file, expected_sha256=expected_hash)
                 self.assertTrue(dest_file.is_file())
                 self.assertEqual(compute_file_sha256(dest_file), expected_hash)
 
+                # Reset the response side_effect for the next call.
+                mock_resp.read.side_effect = [payload, b""]
+
                 # Invalid hash raises ValueError
                 with self.assertRaises(ValueError):
-                    download_firmware("http://example.com/fw.zip", dest_file, expected_sha256="badhash")
+                    download_firmware("https://example.com/fw.zip", dest_file, expected_sha256="badhash")
 
     def test_acquire_firmware_existing_archive(self) -> None:
         """Verify acquire_firmware uses existing archive when SHA-256 matches."""
@@ -165,6 +175,7 @@ class SmokeTestBridgeProtocolTest(unittest.TestCase):
             payload = b"MOCK_ARCHIVE_DATA"
             archive.write_bytes(payload)
             import hashlib
+
             valid_hash = hashlib.sha256(payload).hexdigest()
 
             result = acquire_firmware(fw_dir, url="http://example.com/fw.zip", expected_sha256=valid_hash)
@@ -237,26 +248,31 @@ class SmokeTestBridgeProtocolTest(unittest.TestCase):
 
     def test_download_firmware_exceeds_max_bytes(self) -> None:
         """Verify download_firmware aborts when download exceeds MAX_DOWNLOAD_BYTES."""
-        import io
-        from unittest.mock import patch
+        from unittest.mock import MagicMock, patch
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             dest_file = Path(tmp_dir) / "oversized.zip"
 
-            class OversizedStream(io.BytesIO):
-                def __init__(self) -> None:
-                    super().__init__(b"X" * 65536)
-                    self._read_count = 0
+            chunk_count = 0
 
-                def read(self, size: int = -1) -> bytes:
-                    self._read_count += 1
-                    if self._read_count > (MAX_DOWNLOAD_BYTES // 65536) + 2:
-                        return b""
-                    return b"A" * 65536
+            def oversized_read(size: int = -1) -> bytes:
+                nonlocal chunk_count
+                chunk_count += 1
+                if chunk_count > (MAX_DOWNLOAD_BYTES // 65536) + 2:
+                    return b""
+                return b"A" * 65536
 
-            with patch("urllib.request.urlopen", return_value=OversizedStream()):
+            mock_conn = MagicMock()
+            mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+            mock_conn.__exit__ = MagicMock(return_value=False)
+            mock_resp = MagicMock()
+            mock_resp.status = 200
+            mock_resp.read.side_effect = oversized_read
+            mock_conn.getresponse.return_value = mock_resp
+
+            with patch("http.client.HTTPSConnection", return_value=mock_conn):
                 with self.assertRaises(ValueError) as ctx:
-                    download_firmware("http://example.com/huge.zip", dest_file)
+                    download_firmware("https://example.com/huge.zip", dest_file)
                 self.assertIn("exceeded maximum allowed limit", str(ctx.exception))
 
     def test_prepare_firmware_rejects_parent_dir_traversal(self) -> None:
@@ -291,9 +307,8 @@ class SmokeTestBridgeProtocolTest(unittest.TestCase):
 
     def test_mock_bridge_server_context_manager(self) -> None:
         """Verify MockBridgeServer operates cleanly inside a with-statement."""
-        test_port = 4486
-        with MockBridgeServer(port=test_port) as server:
-            success = test_bridge_client(host="127.0.0.1", port=test_port, timeout=5.0)
+        with MockBridgeServer(port=0) as server:
+            success = test_bridge_client(host="127.0.0.1", port=server.port, timeout=5.0)
             self.assertTrue(success)
 
 
@@ -315,4 +330,3 @@ class FirmwareArchiveIntegrationTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

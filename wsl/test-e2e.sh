@@ -2,8 +2,10 @@
 # Fresh boot, wait for the control adapter, then: insert stick, play track A, measure pitch; swap stick; eject.
 cd ~/rx3
 BRIDGE_SRC="${RX3_BRIDGE_SRC:-./rx3_bridge.py}"
-if [ -f "$BRIDGE_SRC" ] && [ "$BRIDGE_SRC" != "rx3_bridge.py" ]; then
-  tr -d '\r' < "$BRIDGE_SRC" > rx3_bridge.py
+if [ -f "$BRIDGE_SRC" ]; then
+  if [ ! -f rx3_bridge.py ] || [ "$(realpath "$BRIDGE_SRC")" != "$(realpath rx3_bridge.py)" ]; then
+    tr -d '\r' < "$BRIDGE_SRC" > rx3_bridge.py
+  fi
 fi
 pkill -f rx3_bridge.py; pkill -f 'rbp-pi -a'; sleep 1
 (RX3_TIMEOUT=600 ./run-rx3.sh > bridge.log 2>&1 &)

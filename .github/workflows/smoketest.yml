@@ -32,7 +32,6 @@ jobs:
         with:
           path: firmware/
           key: firmware-${{ hashFiles('firmware/firmware.sha256') }}
-          fail-on-cache-miss: true
 
       - name: Run Smoke Test Unit & Protocol Suite
         run: python -m unittest tests.test_smoke_test

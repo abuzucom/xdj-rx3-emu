@@ -9,15 +9,16 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import http.client
 import logging
 import os
-import shutil
 import socket
+import stat
 import struct
 import sys
 import threading
 import time
-import urllib.request
+import urllib.parse
 import zipfile
 from pathlib import Path
 
@@ -29,12 +30,11 @@ MIN_UPD_BYTES = 50_000_000
 MAX_FRAME_LENGTH = 1_048_576
 MAX_DOWNLOAD_BYTES = 1_073_741_824
 MAX_EXTRACT_BYTES = 2_147_483_648
+READ_CHUNK_SIZE = 64 * 1024
 DEFAULT_FIRMWARE_URL = (
     "https://downloads.support.alphatheta.com/firmwares/all-in-one-dj-systems/XDJ-RX3/XDJ-RX3_v120.zip"
 )
-EXPECTED_FIRMWARE_SHA256 = (
-    "e81f34ef300c5faa7faf4b4c436eaaf1476d407447b2dbb845c7fbddb4f51389"
-)
+EXPECTED_FIRMWARE_SHA256 = "e81f34ef300c5faa7faf4b4c436eaaf1476d407447b2dbb845c7fbddb4f51389"
 FIRMWARE_ARCHIVE_NAME = "XDJ-RX3_v120.zip"
 DEFAULT_HASH_FILE = Path("firmware/firmware.sha256")
 
@@ -91,43 +91,58 @@ def read_frame(
 
 
 def compute_file_sha256(path: Path) -> str:
-    """Calculate the SHA-256 digest of a file in 64 KiB chunks."""
+    """Calculate the SHA-256 digest of a file in chunks."""
     digest = hashlib.sha256()
-    with open(path, "rb") as f:
+    with path.open("rb") as f:
         while True:
-            chunk = f.read(65536)
+            chunk = f.read(READ_CHUNK_SIZE)
             if not chunk:
                 break
             digest.update(chunk)
     return digest.hexdigest()
 
 
+def _open_https_url(url: str, timeout: float = 60.0) -> tuple[http.client.HTTPSConnection, http.client.HTTPResponse]:
+    """Open an HTTPS GET request and return the connection plus response."""
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme != "https":
+        raise ValueError(f"Only HTTPS URLs are supported, got {parsed.scheme!r}")
+    if not parsed.hostname:
+        raise ValueError(f"URL has no hostname: {url}")
+    request_path = parsed.path or "/"
+    if parsed.query:
+        request_path += "?" + parsed.query
+    conn = http.client.HTTPSConnection(parsed.hostname, port=parsed.port, timeout=timeout)
+    conn.request("GET", request_path, headers={"User-Agent": "Mozilla/5.0"})
+    response = conn.getresponse()
+    if response.status != http.client.OK:
+        conn.close()
+        raise http.client.HTTPException(f"Unexpected HTTP status {response.status} for {url}")
+    return conn, response
+
+
 def download_firmware(url: str, dest_path: Path, expected_sha256: str | None = None) -> Path:
     """Download firmware archive from url to dest_path and verify SHA-256."""
     dest_path.parent.mkdir(parents=True, exist_ok=True)
     tmp_dest = dest_path.with_suffix(".tmp")
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
     digest = hashlib.sha256()
     total_bytes = 0
+    conn, resp = _open_https_url(url, timeout=60.0)
     try:
-        with urllib.request.urlopen(req, timeout=60.0) as resp, open(tmp_dest, "wb") as dst:
+        with conn, tmp_dest.open("wb") as dst:
             while True:
-                chunk = resp.read(65536)
+                chunk = resp.read(READ_CHUNK_SIZE)
                 if not chunk:
                     break
                 total_bytes += len(chunk)
                 if total_bytes > MAX_DOWNLOAD_BYTES:
-                    raise ValueError(
-                        f"Download size exceeded maximum allowed limit of {MAX_DOWNLOAD_BYTES} bytes"
-                    )
+                    raise ValueError(f"Download size exceeded maximum allowed limit of {MAX_DOWNLOAD_BYTES} bytes")
                 digest.update(chunk)
                 dst.write(chunk)
 
         computed_hash = digest.hexdigest()
         if expected_sha256 and computed_hash.lower() != expected_sha256.lower():
-            raise ValueError(
-                f"Hash mismatch for {url}: expected {expected_sha256}, got {computed_hash}"
-            )
+            raise ValueError(f"Hash mismatch for {url}: expected {expected_sha256}, got {computed_hash}")
         tmp_dest.replace(dest_path)
         print(f"Downloaded and verified firmware archive: {dest_path} (SHA-256: {computed_hash})")
         return dest_path
@@ -163,9 +178,7 @@ def acquire_firmware(
         return archive_path
 
     if not allow_download:
-        raise FileNotFoundError(
-            f"Firmware archive not found in {firmware_dir} and download is disabled."
-        )
+        raise FileNotFoundError(f"Firmware archive not found in {firmware_dir} and download is disabled.")
 
     print(f"Firmware not found in {firmware_dir}, downloading from {url}...")
     return download_firmware(url, firmware_dir / FIRMWARE_ARCHIVE_NAME, expected_sha256)
@@ -177,6 +190,12 @@ def find_firmware_zip(search_dir: Path) -> Path | None:
         return None
     candidates = sorted(search_dir.glob("*.zip"))
     return candidates[0] if candidates else None
+
+
+def is_zip_symlink(info: zipfile.ZipInfo) -> bool:
+    """Check if a ZipInfo entry is a symbolic link."""
+    mode = info.external_attr >> 16
+    return stat.S_ISLNK(mode) if mode else False
 
 
 def prepare_firmware(zip_path: Path, output_dir: Path) -> Path:
@@ -195,9 +214,7 @@ def prepare_firmware(zip_path: Path, output_dir: Path) -> Path:
         else:
             exe_candidates = [n for n in names if n.endswith(".exe") and not n.startswith("__MACOSX")]
             if not exe_candidates:
-                raise ValueError(
-                    f"Archive {zip_path.name} contains neither {UPD_FILENAME} nor an executable payload"
-                )
+                raise ValueError(f"Archive {zip_path.name} contains neither {UPD_FILENAME} nor an executable payload")
             payload_name = exe_candidates[0]
             min_bytes = 1_000_000
 
@@ -206,9 +223,7 @@ def prepare_firmware(zip_path: Path, output_dir: Path) -> Path:
 
         clean_name = Path(payload_name).name
         info = zf.getinfo(payload_name)
-        if hasattr(info, "is_symlink") and info.is_symlink():
-            raise ValueError(f"Archive entry {payload_name} is a symlink")
-        if (info.external_attr >> 16) & 0o170000 == 0o120000:
+        if is_zip_symlink(info):
             raise ValueError(f"Archive entry {payload_name} is a symlink")
         if info.file_size > MAX_EXTRACT_BYTES:
             raise ValueError(
@@ -224,16 +239,18 @@ def prepare_firmware(zip_path: Path, output_dir: Path) -> Path:
 
         print(f"Extracting {payload_name} ({info.file_size} bytes) to {target_file}...")
         written = 0
-        with zf.open(payload_name) as src, open(target_file, "wb") as dst:
+        open_flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+        if hasattr(os, "O_NOFOLLOW"):
+            open_flags |= os.O_NOFOLLOW
+        fd = os.open(target_file, open_flags, 0o644)
+        with zf.open(payload_name) as src, os.fdopen(fd, "wb", closefd=True) as dst:
             while True:
-                chunk = src.read(65536)
+                chunk = src.read(READ_CHUNK_SIZE)
                 if not chunk:
                     break
                 written += len(chunk)
                 if written > MAX_EXTRACT_BYTES:
-                    raise ValueError(
-                        f"Extracted payload exceeds maximum allowed limit of {MAX_EXTRACT_BYTES} bytes"
-                    )
+                    raise ValueError(f"Extracted payload exceeds maximum allowed limit of {MAX_EXTRACT_BYTES} bytes")
                 dst.write(chunk)
 
     if target_file.is_symlink() or not target_file.resolve().is_relative_to(resolved_out):
@@ -268,6 +285,7 @@ class MockBridgeServer:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             sock.bind(("127.0.0.1", self.port))
             sock.listen(1)
+            self.port = sock.getsockname()[1]
             self.server_socket = sock
             self.running = True
             self.thread = threading.Thread(target=self._serve, daemon=True)
@@ -281,7 +299,7 @@ class MockBridgeServer:
             try:
                 self.server_socket.settimeout(1.0)
                 conn, _ = self.server_socket.accept()
-            except (socket.timeout, OSError):
+            except (TimeoutError, OSError):
                 continue
             with conn:
                 conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
@@ -302,7 +320,7 @@ class MockBridgeServer:
                             tile_hdr = struct.pack("<HHHH", 0, 0, 64, 64)
                             tile_pixels = b"\x00\x00\x00\xff" * (64 * 64)
                             write_frame(conn, 0x11, tile_hdr + tile_pixels)
-                    except (socket.timeout, OSError):
+                    except (TimeoutError, OSError):
                         break
 
     def stop(self) -> None:
@@ -320,7 +338,10 @@ class MockBridgeServer:
 
 
 def connect_bridge_socket(host: str, port: int, timeout: float) -> socket.socket | None:
-    """Connect to bridge with retry loop until timeout expires."""
+    """Connect to bridge with retry loop until timeout expires.
+
+    The caller owns the returned socket and must close it.
+    """
     start_time = time.time()
     while time.time() - start_time < timeout:
         try:
@@ -358,7 +379,7 @@ def _handle_handshake(sock: socket.socket, start_time: float, timeout: float) ->
             if received_status and received_screen:
                 print("Smoke test protocol verification successful.")
                 return True
-        except socket.timeout:
+        except TimeoutError:
             continue
         except OSError as err:
             print(f"Socket error during smoke test: {err}", file=sys.stderr)
@@ -370,17 +391,12 @@ def _handle_handshake(sock: socket.socket, start_time: float, timeout: float) ->
 def test_bridge_client(host: str = "127.0.0.1", port: int = DEFAULT_PORT, timeout: float = 10.0) -> bool:
     """Connect to bridge and assert protocol handshake frames."""
     start_time = time.time()
-    while time.time() - start_time < timeout:
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                sock.settimeout(2.0)
-                sock.connect((host, port))
-                return _handle_handshake(sock, start_time, timeout)
-        except OSError:
-            time.sleep(0.5)
-
-    print(f"Failed to connect to bridge at {host}:{port} within {timeout}s", file=sys.stderr)
-    return False
+    sock = connect_bridge_socket(host, port, timeout)
+    if sock is None:
+        print(f"Failed to connect to bridge at {host}:{port} within {timeout}s", file=sys.stderr)
+        return False
+    with sock:
+        return _handle_handshake(sock, start_time, timeout)
 
 
 def main() -> int:
@@ -418,12 +434,12 @@ def main() -> int:
 
     if args.action == "mock-server":
         with MockBridgeServer(port=args.port) as server:
-            print(f"Mock bridge server listening on {args.port}. Press Ctrl+C to stop.")
+            print(f"Mock bridge server listening on {server.port}. Press Ctrl+C to stop.")
             try:
                 while True:
                     time.sleep(1.0)
             except KeyboardInterrupt:
-                pass
+                raise SystemExit(130)
         return 0
 
     if args.action == "client":
