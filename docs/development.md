@@ -16,6 +16,12 @@ Obtain consent before tests, scripts, or Makefile targets.
   the player only. Set `RX3_TIMEOUT=N` to stop after N seconds.
 - End-to-end check: `wsl/test-e2e.sh`. It needs WSL and the recovered
   firmware. CI cannot run it.
+- Smoke test utility: `python scripts/smoke_test.py --action e2e --download`.
+  It downloads and verifies the firmware archive, extracts the payload, and
+  validates the bridge protocol against a mock server.
+- Windows bootstrap: `rx3.cmd` or `python windows/rx3_windows.py`. It stages
+  the WSL harness, fetches the pinned rx3-handoff tooling, builds the chroot,
+  and launches the emulator. See `docs/running.md` for the operator guide.
 - Ruff install: `python -m pip install --require-hashes -r
   requirements-ruff.txt`.
 - Ruff block tier: `ruff check --config ruff.toml --ignore-noqa
