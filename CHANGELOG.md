@@ -48,6 +48,12 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Raise `SystemExit(130)` on `KeyboardInterrupt` in `mock-server` action.
 - Atomically refuse symlinks during archive extraction with `os.O_NOFOLLOW`.
 - Compare canonical file paths in `wsl/test-e2e.sh` to prevent self-truncation.
+- Scan every zip entry for path traversal and symlink attributes before payload selection.
+- Open the extraction output directory with `os.O_NOFOLLOW` and remove partial payloads on extraction failure.
+- Bound `read_frame` header and payload reads to a single monotonic deadline.
+- Use a monotonic retry budget with per-attempt timeouts and log non-refused connection errors in `connect_bridge_socket`.
+- Reset mock bridge state when startup fails so bind and thread errors release the listening socket.
+- Run `wsl/test-e2e.sh` with `set -euo pipefail` and tolerate absent diagnostic logs.
 
 ## [0.2.1] (2026-10-03)
 
