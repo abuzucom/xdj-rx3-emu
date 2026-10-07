@@ -33,6 +33,9 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Wrapped mock bridge client handling in `try/except` so an unexpected socket error does not kill the server thread.
 - Passed the remaining handshake timeout budget to `_handle_handshake` after connection retries.
 - Named mock-bridge tile constants (`TILE_SIZE`, `BLACK_OPAQUE_PIXEL`) and increased the `smoketest.yml` e2e timeout to 30 seconds.
+- Logged `OSError` from `connect_bridge_socket` cleanup instead of swallowing it.
+- Enforced the remaining per-read timeout inside `_handle_handshake` so handshake waits do not exceed the requested budget.
+- Parameterized the WSL test working directory with `RX3_RUN_DIR` in `wsl/test-e2e.sh`.
 - Enclosed test and client sockets in context managers to guarantee resource release.
 - Added path traversal, symlink, and decompression size limit validation on archives.
 - Bound client and server protocol frame sizes to 1 MiB in `scripts/smoke_test.py`.
