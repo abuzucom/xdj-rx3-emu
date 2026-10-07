@@ -83,7 +83,7 @@ class FakeRunner:
 
 
 def _default_options() -> Options:
-    return Options(check_only=False, no_run=False, no_usb=False, skip_download=False, usb1_source=None)
+    return Options(check_only=False, no_run=False, no_usb=False, skip_download=False)
 
 
 class BootstrapUsbSourceTest(unittest.TestCase):
@@ -116,17 +116,29 @@ class BootstrapUsbSourceTest(unittest.TestCase):
         self.assertIn("must be absolute", message)
         self.assertIn("relative", message)
 
+    def test_wsl_path_rejects_unc_and_drive_relative_paths(self) -> None:
+        with self.assertRaises(BootstrapError) as ctx:
+            _wsl_path_from_windows(r"\\server\share")
+        self.assertIn("drive letter", str(ctx.exception))
+        with self.assertRaises(BootstrapError) as ctx:
+            _wsl_path_from_windows(r"\Windows")
+        self.assertIn("must be absolute", str(ctx.exception))
+
     def test_sync_usb1_source_rsyncs_existing_folder(self) -> None:
         runner = FakeRunner()
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "music"
             source.mkdir()
+            expected_wsl = _wsl_path_from_windows(str(source)) + "/"
             sync_usb1_source(runner, str(source))
-        command = runner.calls[0][0][-1]
-        self.assertIn("rsync -a --delete", command)
-        self.assertIn("--max-size=1G", command)
-        self.assertIn("timeout 600", command)
-        self.assertIn("~/rx3/usb1/Music/", command)
+        commands = [call[0][-1] for call in runner.calls]
+        self.assertTrue(any("test -d" in command for command in commands))
+        rsync_command = next(command for command in commands if "rsync" in command)
+        self.assertIn("rsync -a --delete", rsync_command)
+        self.assertIn("--max-size=1G", rsync_command)
+        self.assertIn("timeout 600", rsync_command)
+        self.assertIn(expected_wsl, rsync_command)
+        self.assertIn("~/rx3/usb1/Music/", rsync_command)
 
     def test_sync_usb1_source_quotes_shell_metacharacters(self) -> None:
         runner = FakeRunner()
@@ -134,8 +146,9 @@ class BootstrapUsbSourceTest(unittest.TestCase):
             source = Path(tmp) / "music'; echo pwned"
             source.mkdir()
             sync_usb1_source(runner, str(source))
-        command = runner.calls[0][0][-1]
-        tokens = shlex.split(command)
+        commands = [call[0][-1] for call in runner.calls]
+        rsync_command = next(command for command in commands if "rsync" in command)
+        tokens = shlex.split(rsync_command)
         # The malicious words must not appear as separate shell tokens.
         self.assertNotIn("echo", tokens)
         self.assertNotIn("pwned", tokens)
@@ -144,22 +157,14 @@ class BootstrapUsbSourceTest(unittest.TestCase):
         source_tokens = [t for t in tokens if t.startswith("/mnt/")]
         self.assertEqual(source_tokens, [expected_src])
 
-    def test_sync_usb1_source_fails_when_folder_missing(self) -> None:
+    def test_sync_usb1_source_fails_when_folder_missing_in_wsl(self) -> None:
         runner = FakeRunner()
+        runner.scripted.append(("test -d", _completed(["wsl.exe"], 1)))
         with self.assertRaises(BootstrapError) as ctx:
             sync_usb1_source(runner, r"C:\nonexistent\folder")
         message = str(ctx.exception)
-        self.assertIn("USB1 source folder does not exist", message)
+        self.assertIn("USB1 source folder does not exist in WSL", message)
         self.assertIn("C:", message)
-
-    def test_sync_usb1_source_rejects_file_path(self) -> None:
-        runner = FakeRunner()
-        with tempfile.TemporaryDirectory() as tmp:
-            source_file = Path(tmp) / "music.txt"
-            source_file.write_text("not a folder")
-            with self.assertRaises(BootstrapError) as ctx:
-                sync_usb1_source(runner, str(source_file))
-        self.assertIn("must be a directory", str(ctx.exception))
 
     def test_sync_usb1_source_rejects_parent_traversal(self) -> None:
         runner = FakeRunner()
