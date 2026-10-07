@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import os
 import shlex
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -103,11 +104,24 @@ class BootstrapUsbSourceTest(unittest.TestCase):
         with patch.dict("os.environ", {}, clear=True):
             self.assertIsNone(_resolve_usb1_source(_default_options()))
 
+    def test_resolve_usb1_source_treats_empty_string_as_explicit(self) -> None:
+        with patch.dict("os.environ", {USB1_SOURCE_ENV: r"C:\env\music"}):
+            options = Options(check_only=False, no_run=False, no_usb=False, skip_download=False, usb1_source="")
+        self.assertEqual(_resolve_usb1_source(options), "")
+
     def test_wsl_path_translates_windows_drive_path(self) -> None:
         self.assertEqual(_wsl_path_from_windows(r"C:\Music\140"), "/mnt/c/Music/140")
 
     def test_wsl_path_translates_path_with_spaces(self) -> None:
         self.assertEqual(_wsl_path_from_windows(r"C:\My Music\140"), "/mnt/c/My Music/140")
+
+    def test_wsl_path_normalizes_trailing_separator(self) -> None:
+        self.assertEqual(_wsl_path_from_windows("C:\\Music\\140\\"), "/mnt/c/Music/140")
+
+    def test_wsl_path_rejects_parent_traversal(self) -> None:
+        with self.assertRaises(BootstrapError) as ctx:
+            _wsl_path_from_windows(r"C:\Music\..\Windows")
+        self.assertIn("must not traverse parents", str(ctx.exception))
 
     def test_wsl_path_rejects_relative_path(self) -> None:
         with self.assertRaises(BootstrapError) as ctx:
@@ -132,7 +146,7 @@ class BootstrapUsbSourceTest(unittest.TestCase):
             expected_wsl = _wsl_path_from_windows(str(source)) + "/"
             sync_usb1_source(runner, str(source))
         commands = [call[0][-1] for call in runner.calls]
-        self.assertTrue(any("test -d" in command for command in commands))
+        self.assertTrue(any("readlink -f" in command or "test -d" in command for command in commands))
         rsync_command = next(command for command in commands if "rsync" in command)
         self.assertIn("rsync -a --delete", rsync_command)
         self.assertIn("--max-size=1G", rsync_command)
@@ -140,6 +154,7 @@ class BootstrapUsbSourceTest(unittest.TestCase):
         self.assertIn(expected_wsl, rsync_command)
         self.assertIn("~/rx3/usb1/Music/", rsync_command)
 
+    @unittest.skipUnless(shutil.which("bash"), "bash not available")
     def test_sync_usb1_source_quotes_shell_metacharacters(self) -> None:
         runner = FakeRunner()
         with tempfile.TemporaryDirectory() as tmp:
@@ -156,6 +171,9 @@ class BootstrapUsbSourceTest(unittest.TestCase):
         expected_src = _wsl_path_from_windows(str(source)) + "/"
         source_tokens = [t for t in tokens if t.startswith("/mnt/")]
         self.assertEqual(source_tokens, [expected_src])
+        # The generated command must be valid shell syntax.
+        syntax = subprocess.run(["bash", "-n", "-c", rsync_command], capture_output=True, text=True)
+        self.assertEqual(syntax.returncode, 0, syntax.stderr)
 
     def test_sync_usb1_source_fails_when_folder_missing_in_wsl(self) -> None:
         runner = FakeRunner()
@@ -163,14 +181,52 @@ class BootstrapUsbSourceTest(unittest.TestCase):
         with self.assertRaises(BootstrapError) as ctx:
             sync_usb1_source(runner, r"C:\nonexistent\folder")
         message = str(ctx.exception)
-        self.assertIn("USB1 source folder does not exist in WSL", message)
-        self.assertIn("C:", message)
+        self.assertIn("USB1 source folder does not exist in WSL or is outside allowed root", message)
 
     def test_sync_usb1_source_rejects_parent_traversal(self) -> None:
         runner = FakeRunner()
         with self.assertRaises(BootstrapError) as ctx:
             sync_usb1_source(runner, r"C:\Music\..\Windows")
         self.assertIn("must not traverse parents", str(ctx.exception))
+
+    def test_sync_usb1_source_rejects_normalized_traversal_outside_allowed_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            music = Path(tmp) / "Music"
+            music.mkdir()
+            (music / "foo").mkdir()
+            allowed_root = str(music)
+            traversal = str(Path(tmp) / "Music" / "foo" / ".." / "..")
+            runner = FakeRunner()
+            with patch.dict("os.environ", {USB1_ALLOWED_ROOT_ENV: allowed_root}):
+                with self.assertRaises(BootstrapError) as ctx:
+                    sync_usb1_source(runner, traversal)
+        self.assertTrue(
+            "must not traverse parents" in str(ctx.exception) or "outside allowed root" in str(ctx.exception),
+            str(ctx.exception),
+        )
+
+    def test_sync_usb1_source_allowed_root_is_case_insensitive(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            allowed = Path(tmp) / "Allowed"
+            allowed.mkdir()
+            sub = allowed / "sub"
+            sub.mkdir()
+            runner = FakeRunner()
+            with patch.dict("os.environ", {USB1_ALLOWED_ROOT_ENV: str(allowed)}):
+                sync_usb1_source(runner, str(sub).lower())
+        commands = [call[0][-1] for call in runner.calls]
+        self.assertTrue(any("readlink -f" in command for command in commands))
+
+    def test_sync_usb1_source_empty_allowed_root_env_is_unset(self) -> None:
+        runner = FakeRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "music"
+            source.mkdir()
+            with patch.dict("os.environ", {USB1_ALLOWED_ROOT_ENV: "  "}):
+                sync_usb1_source(runner, str(source))
+        commands = [call[0][-1] for call in runner.calls]
+        self.assertFalse(any("readlink -f" in command for command in commands))
+        self.assertTrue(any("test -d" in command for command in commands))
 
     def test_sync_usb1_source_honors_allowed_root_env(self) -> None:
         runner = FakeRunner()
@@ -183,6 +239,7 @@ class BootstrapUsbSourceTest(unittest.TestCase):
             outside.mkdir()
             with patch.dict("os.environ", {USB1_ALLOWED_ROOT_ENV: str(allowed)}):
                 sync_usb1_source(runner, str(allowed_sub))
+            runner.scripted.append(("readlink -f", _completed(["wsl.exe"], 1)))
             with self.assertRaises(BootstrapError) as ctx:
                 with patch.dict("os.environ", {USB1_ALLOWED_ROOT_ENV: str(allowed)}):
                     sync_usb1_source(runner, str(outside))

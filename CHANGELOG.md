@@ -15,11 +15,12 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 - Hardened `sync_usb1_source()` against shell injection by passing the WSL source path through `shlex.quote()`.
-- Validated `RX3_USB1_SOURCE` as a drive-letter absolute path, rejected parent-traversal components, and added optional `RX3_USB1_ALLOWED_ROOT` confinement.
-- Moved the USB1 source existence check into WSL (`test -d`) so the check runs where rsync runs.
+- Moved USB1 source existence and allowed-root confinement into WSL via `readlink -f` and a case-insensitive prefix check, closing Windows/WSL view mismatches and TOCTOU races.
+- Validated `RX3_USB1_SOURCE` and `RX3_USB1_ALLOWED_ROOT` as drive-letter absolute paths and rejected parent-traversal components.
+- Made `_resolve_usb1_source()` distinguish `None` from an explicit empty string.
 - Replaced the phase-plan lambda with `functools.partial`.
 - Bounded the USB1 sync with `rsync --max-size=1G` and a WSL `timeout 600` to limit resource exhaustion.
-- `tests/test_rx3_windows.py` covers USB1 source resolution, WSL path translation, drive-letter validation, shell escaping, validation failures, allowed-root enforcement, rsync bounds, and plan assembly.
+- `tests/test_rx3_windows.py` covers USB1 source resolution, drive-letter validation, WSL path translation, shell escaping, bash syntax validation, validation failures, allowed-root enforcement (including case-insensitivity and normalized traversal), rsync bounds, and plan assembly.
 
 ## [0.4.0] (2026-10-07)
 

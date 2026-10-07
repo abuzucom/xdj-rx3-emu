@@ -242,60 +242,63 @@ def seed_usb_stick(runner: CommandRunner) -> None:
 
 def _resolve_usb1_source(options: Options) -> str | None:
     """Return the configured Windows source path for USB1, or None if unset."""
-    return options.usb1_source or os.environ.get(USB1_SOURCE_ENV)
+    return options.usb1_source if options.usb1_source is not None else os.environ.get(USB1_SOURCE_ENV)
+
+
+def _validate_windows_drive_path(windows_path: str, label: str) -> None:
+    """Validate that a Windows path is drive-letter absolute with no traversal."""
+    p = Path(windows_path)
+    if not p.is_absolute():
+        raise BootstrapError(f"{label} path must be absolute: {windows_path!r}")
+    if any(part == ".." for part in p.parts):
+        raise BootstrapError(f"{label} path must not traverse parents: {windows_path!r}")
+    drive = p.drive
+    if len(drive) != 2 or drive[1] != ":" or not drive[0].isalpha():
+        raise BootstrapError(f"{label} path must use a drive letter (e.g., C:\\): {windows_path!r}")
 
 
 def _wsl_path_from_windows(windows_path: str) -> str:
     """Translate a Windows drive-letter path to a WSL /mnt path."""
+    _validate_windows_drive_path(windows_path, "USB source path")
     p = Path(windows_path)
-    if not p.is_absolute():
-        raise BootstrapError(f"USB source path must be absolute: {windows_path!r}")
-    drive = p.drive
-    if len(drive) != 2 or drive[1] != ":" or not drive[0].isalpha():
-        raise BootstrapError(f"USB source path must use a drive letter (e.g., C:\\): {windows_path!r}")
-    return f"/mnt/{drive[0].lower()}/" + "/".join(p.parts[1:])
-
-
-def _validate_usb1_source(windows_source: str) -> None:
-    """Validate format and allowed root before rsync sees the path.
-
-    Requires an absolute drive-letter path with no parent-traversal
-    components. If RX3_USB1_ALLOWED_ROOT is set, the source must resolve
-    under that root. Existence is checked in WSL, where rsync runs.
-    """
-    input_path = Path(windows_source)
-    if not input_path.is_absolute():
-        raise BootstrapError(f"USB1 source path must be absolute: {windows_source!r}")
-    if any(part == ".." for part in input_path.parts):
-        raise BootstrapError(f"USB1 source path must not traverse parents: {windows_source!r}")
-    drive = input_path.drive
-    if len(drive) != 2 or drive[1] != ":" or not drive[0].isalpha():
-        raise BootstrapError(f"USB1 source path must use a drive letter (e.g., C:\\): {windows_source!r}")
-    allowed_root = os.environ.get(USB1_ALLOWED_ROOT_ENV)
-    if allowed_root:
-        try:
-            src = input_path.resolve(strict=True)
-        except OSError as exc:
-            raise BootstrapError(f"USB1 source folder does not exist: {windows_source!r}") from exc
-        try:
-            root = Path(allowed_root).resolve(strict=True)
-        except OSError as exc:
-            raise BootstrapError(f"USB1 allowed root does not exist: {allowed_root!r}") from exc
-        if root not in (src, *src.parents):
-            raise BootstrapError(f"USB1 source outside allowed root {allowed_root!r}: {windows_source!r}")
+    drive = p.drive[0].lower()
+    # Reconstruct from parts to drop any trailing separator.
+    return f"/mnt/{drive}/" + "/".join(Path(*p.parts).parts[1:])
 
 
 def sync_usb1_source(runner: CommandRunner, windows_source: str) -> None:
-    """Sync the validated Windows music folder into the WSL virtual USB1 stick."""
-    _validate_usb1_source(windows_source)
+    """Sync the validated Windows music folder into the WSL virtual USB1 stick.
+
+    Validation, canonicalization, and allowed-root confinement all happen in
+    WSL where rsync runs, so symlink races and Windows/WSL view mismatches
+    cannot bypass the checks.
+    """
+    _validate_windows_drive_path(windows_source, "USB1 source")
     wsl_src = _wsl_path_from_windows(windows_source)
-    quoted_src = shlex.quote(wsl_src + "/")
-    check = runner.run(wsl_script(f"test -d {quoted_src}"))
+    allowed_root = os.environ.get(USB1_ALLOWED_ROOT_ENV, "").strip() or None
+    if allowed_root:
+        _validate_windows_drive_path(allowed_root, "USB1 allowed root")
+        wsl_root = _wsl_path_from_windows(allowed_root)
+        # Canonicalize and confine inside WSL. Case-insensitive prefix match
+        # mirrors Windows filesystem behavior.
+        check = runner.run(
+            wsl_script(
+                "set -e; "
+                f"src=$(readlink -f {shlex.quote(wsl_src)}); "
+                f"root=$(readlink -f {shlex.quote(wsl_root)}); "
+                'test -d "$src"; '
+                "[[ ${src,,} == ${root,,}/* ]]"
+            )
+        )
+    else:
+        check = runner.run(wsl_script(f"test -d {shlex.quote(wsl_src)}"))
     if check.returncode != 0:
         raise BootstrapError(
-            f"USB1 source folder does not exist in WSL: {windows_source!r}. "
+            f"USB1 source folder does not exist in WSL or is outside allowed root: {windows_source!r}. "
             "Create it and add music, or unset RX3_USB1_SOURCE / omit --usb1-source to skip this phase."
         )
+    # shlex.quote is safe here because wsl_src is already in POSIX form.
+    quoted_src = shlex.quote(wsl_src + "/")
     command = (
         "mkdir -p ~/rx3/usb1/Music && "
         f"timeout {USB1_SYNC_TIMEOUT_SECONDS} rsync -a --delete --max-size=1G --exclude='.*' "
