@@ -10,6 +10,7 @@ is idempotent and safe to re-run.
 from __future__ import annotations
 
 import argparse
+import functools
 import os
 import shlex
 import shutil
@@ -73,7 +74,7 @@ class Options:
     no_run: bool
     no_usb: bool
     skip_download: bool
-    usb1_source: str | None
+    usb1_source: str | None = None
 
 
 @dataclass
@@ -245,40 +246,43 @@ def _resolve_usb1_source(options: Options) -> str | None:
 
 
 def _wsl_path_from_windows(windows_path: str) -> str:
-    """Translate a Windows absolute path to a WSL /mnt path."""
+    """Translate a Windows drive-letter path to a WSL /mnt path."""
     p = Path(windows_path)
     if not p.is_absolute():
         raise BootstrapError(f"USB source path must be absolute: {windows_path!r}")
-    drive = p.drive.replace(":", "").lower()
-    return "/mnt/" + drive + "/" + "/".join(p.parts[1:])
+    drive = p.drive
+    if len(drive) != 2 or drive[1] != ":" or not drive[0].isalpha():
+        raise BootstrapError(f"USB source path must use a drive letter (e.g., C:\\): {windows_path!r}")
+    return f"/mnt/{drive[0].lower()}/" + "/".join(p.parts[1:])
 
 
-def _validate_usb1_source(windows_source: str) -> Path:
-    """Validate the configured source path before rsync sees it.
+def _validate_usb1_source(windows_source: str) -> None:
+    """Validate format and allowed root before rsync sees the path.
 
-    Requires an existing directory with no parent-traversal components. If
-    RX3_USB1_ALLOWED_ROOT is set, the source must resolve under that root.
+    Requires an absolute drive-letter path with no parent-traversal
+    components. If RX3_USB1_ALLOWED_ROOT is set, the source must resolve
+    under that root. Existence is checked in WSL, where rsync runs.
     """
-    if not Path(windows_source).is_absolute():
-        raise BootstrapError(f"USB1 source path must be absolute: {windows_source!r}")
     input_path = Path(windows_source)
+    if not input_path.is_absolute():
+        raise BootstrapError(f"USB1 source path must be absolute: {windows_source!r}")
     if any(part == ".." for part in input_path.parts):
         raise BootstrapError(f"USB1 source path must not traverse parents: {windows_source!r}")
-    try:
-        src = input_path.resolve(strict=True)
-    except OSError as exc:
-        raise BootstrapError(f"USB1 source folder does not exist: {windows_source!r}") from exc
-    if not src.is_dir():
-        raise BootstrapError(f"USB1 source must be a directory: {windows_source!r}")
+    drive = input_path.drive
+    if len(drive) != 2 or drive[1] != ":" or not drive[0].isalpha():
+        raise BootstrapError(f"USB1 source path must use a drive letter (e.g., C:\\): {windows_source!r}")
     allowed_root = os.environ.get(USB1_ALLOWED_ROOT_ENV)
     if allowed_root:
+        try:
+            src = input_path.resolve(strict=True)
+        except OSError as exc:
+            raise BootstrapError(f"USB1 source folder does not exist: {windows_source!r}") from exc
         try:
             root = Path(allowed_root).resolve(strict=True)
         except OSError as exc:
             raise BootstrapError(f"USB1 allowed root does not exist: {allowed_root!r}") from exc
         if root not in (src, *src.parents):
             raise BootstrapError(f"USB1 source outside allowed root {allowed_root!r}: {windows_source!r}")
-    return src
 
 
 def sync_usb1_source(runner: CommandRunner, windows_source: str) -> None:
@@ -286,6 +290,12 @@ def sync_usb1_source(runner: CommandRunner, windows_source: str) -> None:
     _validate_usb1_source(windows_source)
     wsl_src = _wsl_path_from_windows(windows_source)
     quoted_src = shlex.quote(wsl_src + "/")
+    check = runner.run(wsl_script(f"test -d {quoted_src}"))
+    if check.returncode != 0:
+        raise BootstrapError(
+            f"USB1 source folder does not exist in WSL: {windows_source!r}. "
+            "Create it and add music, or unset RX3_USB1_SOURCE / omit --usb1-source to skip this phase."
+        )
     command = (
         "mkdir -p ~/rx3/usb1/Music && "
         f"timeout {USB1_SYNC_TIMEOUT_SECONDS} rsync -a --delete --max-size=1G --exclude='.*' "
@@ -318,7 +328,7 @@ def build_phase_plan(options: Options) -> list[tuple[str, PhaseAction]]:
         plan.append(("Seed virtual USB stick", seed_usb_stick))
         usb_source = _resolve_usb1_source(options)
         if usb_source:
-            plan.append(("Sync USB1 music", lambda runner: sync_usb1_source(runner, usb_source)))
+            plan.append(("Sync USB1 music", functools.partial(sync_usb1_source, windows_source=usb_source)))
     if not options.no_run:
         plan.append(("Launch emulator", launch_emulator))
     return plan

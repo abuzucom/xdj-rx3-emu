@@ -112,7 +112,7 @@ Replace `/mnt/c/path/to/repo` with the real repository location.
 
 ## Virtual USB music folder
 
-Set `RX3_USB1_SOURCE` to a Windows folder containing MP3, WAV, AIFF, or FLAC files. The bootstrap rsyncs that folder into the virtual USB1 stick before launch. Use an absolute path. If the path contains spaces, quote it.
+Set `RX3_USB1_SOURCE` to a Windows folder containing MP3, WAV, AIFF, or FLAC files. The path must use a drive letter (for example, `C:\Music` or `K:\DJ-USB\140`). The bootstrap rsyncs that folder into the virtual USB1 stick before launch. Quote the value if the path contains spaces.
 
 Example with an environment variable:
 
