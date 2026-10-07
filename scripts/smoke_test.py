@@ -8,6 +8,7 @@ and client handshake validation for local and CI environments.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import http.client
 import logging
@@ -20,6 +21,7 @@ import threading
 import time
 import urllib.parse
 import zipfile
+from collections.abc import Iterator
 from pathlib import Path
 
 DEFAULT_PORT = 4480
@@ -127,6 +129,7 @@ def download_firmware(url: str, dest_path: Path, expected_sha256: str | None = N
     tmp_dest = dest_path.with_suffix(".tmp")
     digest = hashlib.sha256()
     total_bytes = 0
+    success = False
     conn, resp = _open_https_url(url, timeout=60.0)
     try:
         with conn, tmp_dest.open("wb") as dst:
@@ -144,10 +147,11 @@ def download_firmware(url: str, dest_path: Path, expected_sha256: str | None = N
         if expected_sha256 and computed_hash.lower() != expected_sha256.lower():
             raise ValueError(f"Hash mismatch for {url}: expected {expected_sha256}, got {computed_hash}")
         tmp_dest.replace(dest_path)
+        success = True
         print(f"Downloaded and verified firmware archive: {dest_path} (SHA-256: {computed_hash})")
         return dest_path
     finally:
-        if tmp_dest.exists():
+        if not success and tmp_dest.exists():
             tmp_dest.unlink()
 
 
@@ -242,16 +246,34 @@ def prepare_firmware(zip_path: Path, output_dir: Path) -> Path:
         open_flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
         if hasattr(os, "O_NOFOLLOW"):
             open_flags |= os.O_NOFOLLOW
-        fd = os.open(target_file, open_flags, 0o644)
-        with zf.open(payload_name) as src, os.fdopen(fd, "wb", closefd=True) as dst:
-            while True:
-                chunk = src.read(READ_CHUNK_SIZE)
-                if not chunk:
-                    break
-                written += len(chunk)
-                if written > MAX_EXTRACT_BYTES:
-                    raise ValueError(f"Extracted payload exceeds maximum allowed limit of {MAX_EXTRACT_BYTES} bytes")
-                dst.write(chunk)
+
+        dir_fd = -1
+        fd = -1
+        file_owned_by_fdopen = False
+        try:
+            if hasattr(os, "O_DIRECTORY"):
+                dir_fd = os.open(output_dir, os.O_RDONLY | os.O_DIRECTORY)
+                fd = os.open(clean_name, open_flags, 0o644, dir_fd=dir_fd)
+            else:
+                fd = os.open(target_file, open_flags, 0o644)
+            file_obj = os.fdopen(fd, "wb", closefd=True)
+            file_owned_by_fdopen = True
+            with zf.open(payload_name) as src, file_obj as dst:
+                while True:
+                    chunk = src.read(READ_CHUNK_SIZE)
+                    if not chunk:
+                        break
+                    written += len(chunk)
+                    if written > MAX_EXTRACT_BYTES:
+                        raise ValueError(
+                            f"Extracted payload exceeds maximum allowed limit of {MAX_EXTRACT_BYTES} bytes"
+                        )
+                    dst.write(chunk)
+        finally:
+            if fd != -1 and not file_owned_by_fdopen:
+                os.close(fd)
+            if dir_fd != -1:
+                os.close(dir_fd)
 
     if target_file.is_symlink() or not target_file.resolve().is_relative_to(resolved_out):
         raise ValueError("Extracted target resolves outside output directory")
@@ -291,6 +313,8 @@ class MockBridgeServer:
             self.thread = threading.Thread(target=self._serve, daemon=True)
             self.thread.start()
         except Exception:
+            if self.server_socket is sock:
+                self.server_socket = None
             sock.close()
             raise
 
@@ -337,18 +361,37 @@ class MockBridgeServer:
             self.thread.join(timeout=2.0)
 
 
-def connect_bridge_socket(host: str, port: int, timeout: float) -> socket.socket | None:
+@contextlib.contextmanager
+def connect_bridge_socket(
+    host: str,
+    port: int,
+    timeout: float,
+) -> Iterator[socket.socket | None]:
     """Connect to bridge with retry loop until timeout expires.
 
-    The caller owns the returned socket and must close it.
+    Yields the connected socket, or None if the timeout expires. The
+    socket is closed when the with-block exits.
     """
-    start_time = time.time()
-    while time.time() - start_time < timeout:
+    sock: socket.socket | None = None
+    deadline = time.time() + timeout
+    while time.time() < deadline:
         try:
-            return socket.create_connection((host, port), timeout=2.0)
-        except OSError:
+            sock = socket.create_connection((host, port), timeout=2.0)
+            break
+        except ConnectionRefusedError:
+            if time.time() >= deadline:
+                break
             time.sleep(0.5)
-    return None
+        except OSError:
+            break
+    try:
+        yield sock
+    finally:
+        if sock is not None:
+            try:
+                sock.close()
+            except OSError:
+                pass
 
 
 def _handle_handshake(sock: socket.socket, start_time: float, timeout: float) -> bool:
@@ -391,11 +434,10 @@ def _handle_handshake(sock: socket.socket, start_time: float, timeout: float) ->
 def test_bridge_client(host: str = "127.0.0.1", port: int = DEFAULT_PORT, timeout: float = 10.0) -> bool:
     """Connect to bridge and assert protocol handshake frames."""
     start_time = time.time()
-    sock = connect_bridge_socket(host, port, timeout)
-    if sock is None:
-        print(f"Failed to connect to bridge at {host}:{port} within {timeout}s", file=sys.stderr)
-        return False
-    with sock:
+    with connect_bridge_socket(host, port, timeout) as sock:
+        if sock is None:
+            print(f"Failed to connect to bridge at {host}:{port} within {timeout}s", file=sys.stderr)
+            return False
         return _handle_handshake(sock, start_time, timeout)
 
 
