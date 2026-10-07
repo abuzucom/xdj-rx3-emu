@@ -53,6 +53,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Bound `read_frame` header and payload reads to a single monotonic deadline.
 - Use a monotonic retry budget with per-attempt timeouts and log non-refused connection errors in `connect_bridge_socket`.
 - Reset mock bridge state when startup fails so bind and thread errors release the listening socket.
+- Close the mock bridge listening socket directly on startup failure so failed starts cannot leak it.
 - Run `wsl/test-e2e.sh` with `set -euo pipefail` and tolerate absent diagnostic logs.
 
 ## [0.2.1] (2026-10-03)
