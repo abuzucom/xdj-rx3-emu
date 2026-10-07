@@ -103,7 +103,7 @@ class SmokeTestBridgeProtocolTest(unittest.TestCase):
                 with conn:
                     # Send truncated 0x10 frame (only 2 bytes instead of 4)
                     write_frame(conn, 0x10, b"\x00\x00")
-                    result = _handle_handshake(client_sock, time.time(), timeout=1.0)
+                    result = _handle_handshake(client_sock, time.monotonic(), timeout=1.0)
                     self.assertFalse(result)
 
     def test_prepare_firmware_rejects_path_traversal(self) -> None:
