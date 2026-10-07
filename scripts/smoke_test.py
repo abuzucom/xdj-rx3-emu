@@ -256,12 +256,17 @@ def prepare_firmware(zip_path: Path, output_dir: Path) -> Path:
         resolved_target = target_file.resolve()
         if target_file.is_symlink() or not resolved_target.is_relative_to(resolved_out):
             raise ValueError("Archive member resolves outside output directory")
+        if target_file.exists() or target_file.is_symlink():
+            target_file.unlink(missing_ok=True)
 
         print(f"Extracting {payload_name} ({info.file_size} bytes) to {target_file}...")
         written = 0
         extract_complete = False
         target_opened = False
-        open_flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+        # O_EXCL on a pre-unlinked path fails instead of following a symlink
+        # swapped in between the unlink and the open. This keeps the fallback
+        # safe on platforms without os.O_NOFOLLOW, such as Windows.
+        open_flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
         if hasattr(os, "O_NOFOLLOW"):
             open_flags |= os.O_NOFOLLOW
 
@@ -430,8 +435,8 @@ def _handle_handshake(sock: socket.socket, start_time: float, timeout: float) ->
     received_status = False
     received_screen = False
 
-    while time.time() - start_time < timeout:
-        remaining = timeout - (time.time() - start_time)
+    while time.monotonic() - start_time < timeout:
+        remaining = timeout - (time.monotonic() - start_time)
         if remaining <= 0:
             return False
         try:
@@ -467,12 +472,12 @@ def _handle_handshake(sock: socket.socket, start_time: float, timeout: float) ->
 
 def test_bridge_client(host: str = "127.0.0.1", port: int = DEFAULT_PORT, timeout: float = 10.0) -> bool:
     """Connect to bridge and assert protocol handshake frames."""
-    deadline = time.time() + timeout
+    deadline = time.monotonic() + timeout
     with connect_bridge_socket(host, port, timeout) as sock:
         if sock is None:
             print(f"Failed to connect to bridge at {host}:{port} within {timeout}s", file=sys.stderr)
             return False
-        return _handle_handshake(sock, time.time(), deadline - time.time())
+        return _handle_handshake(sock, time.monotonic(), deadline - time.monotonic())
 
 
 def main() -> int:
