@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 One deviation applies. A version heading parenthesizes the release date.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.2] (2026-10-08)
+
+### Fixed
+- Console closure stops the owned RX3 player and bridge process group.
+- Startup reports existing RX3 processes and occupied bridge ports before bootstrap.
+- A runtime lock prevents concurrent launches from sharing firmware files.
+- Failed runtime sessions retain the console error output.
+
 ## [0.8.1] (2026-10-08)
 
 ### Fixed

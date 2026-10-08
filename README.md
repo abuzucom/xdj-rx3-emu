@@ -9,6 +9,10 @@ and two virtual USB sticks whose folders live on the Windows side.
 server by the user and unpacked locally with the Rx3-flx4 project's `recover-firmware.py`; this repo only
 holds the emulation harness, shims and bridge written for it.
 
+The emulator command window owns its runtime session. Closing that window stops
+the player and bridge. Startup reports leftover RX3 processes or an occupied
+bridge port before changing runtime files. See [running instructions](docs/running.md).
+
 ```
  WSL (Ubuntu, no sudo)                                              Windows / client
   proot + qemu-arm (binfmt) chroot of the firmware rootfs

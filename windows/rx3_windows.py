@@ -94,7 +94,10 @@ class CommandRunner:
     def launch(self, args: Sequence[str]) -> None:
         """Start a detached command in its own console window."""
         creation_flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
-        subprocess.Popen(list(args), creationflags=creation_flags)
+        subprocess.Popen(
+            [sys.executable, str(REPO_ROOT / "windows" / "rx3_session.py"), *args],
+            creationflags=creation_flags,
+        )
 
 
 def require_success(result: subprocess.CompletedProcess[bytes], action: str, recovery: str) -> None:
@@ -405,6 +408,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     options = parse_args(argv)
     plan = build_phase_plan(options)
     runner = CommandRunner()
+    if not options.check_only:
+        guard = (WSL_SOURCE_DIR / "rx3_guard.py").read_bytes()
+        result = runner.run(["wsl.exe", "python3", "-"], input_bytes=guard)
+        try:
+            require_success(result, "RX3 process preflight", "Close the existing RX3 session before retrying")
+        except BootstrapError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
     for index, (title, action) in enumerate(plan, start=1):
         print(f"[{index}/{len(plan)}] {title}...")
         try:
