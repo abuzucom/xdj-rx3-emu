@@ -5,9 +5,9 @@ from __future__ import annotations
 import socket
 import struct
 import threading
-import time
 import unittest
 from fractions import Fraction
+from unittest.mock import patch
 
 from controller_client.main import parse_controller_arguments
 from controller_client.viewer import (
@@ -16,7 +16,7 @@ from controller_client.viewer import (
     rgba_to_ppm,
 )
 from controllers.backends.base import ControllerBackend
-from controllers.bridge_client import BridgeClient
+from controllers.bridge_client import BridgeClient, BridgeConnectionError
 from controllers.events import ButtonEvent, ButtonOp, ControlKey
 from controllers.protocol import FrameStreamDecoder, read_frame, write_frame
 from controllers.screen import ScreenFrameBuffer
@@ -40,6 +40,28 @@ class _OneShotScreenBackend(ControllerBackend):
 
     def close(self) -> None:
         self.closed = True
+
+
+class _BlockingConnectionSocket:
+    def __init__(self) -> None:
+        self.connect_started = threading.Event()
+        self.closed = threading.Event()
+        self.timeout: float | None = None
+
+    def settimeout(self, timeout: float) -> None:
+        self.timeout = timeout
+
+    def connect(self, _address: tuple[str, int]) -> None:
+        self.connect_started.set()
+        if self.closed.wait(timeout=self.timeout):
+            raise OSError("connection socket closed")
+        raise TimeoutError("test connection timed out")
+
+    def shutdown(self, _how: int) -> None:
+        self.closed.set()
+
+    def close(self) -> None:
+        self.closed.set()
 
 
 class FrameStreamDecoderTest(unittest.TestCase):
@@ -113,27 +135,53 @@ class BridgeScreenIntegrationTest(unittest.TestCase):
         self.assertEqual(screen.snapshot(), (1, 1, pixels))
 
     def test_close_cancels_bridge_connection_retry(self) -> None:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
-            server.bind(("127.0.0.1", 0))
-            port = server.getsockname()[1]
+        connecting_socket = _BlockingConnectionSocket()
         backend = _OneShotScreenBackend()
-        client = BridgeClient(backend, "127.0.0.1", port, screen_buffer=ScreenFrameBuffer())
-        client_errors: list[RuntimeError] = []
+        client = BridgeClient(
+            backend,
+            "bridge.test",
+            4480,
+            screen_buffer=ScreenFrameBuffer(),
+        )
+        client_errors: list[BridgeConnectionError] = []
 
         def run_client() -> None:
             try:
                 client.run()
-            except RuntimeError as exc:
+            except BridgeConnectionError as exc:
                 client_errors.append(exc)
 
-        client_thread = threading.Thread(target=run_client)
-        client_thread.start()
-        time.sleep(0.05)
-        client.close()
-        client_thread.join(timeout=3.0)
+        addresses = [
+            (
+                socket.AF_INET,
+                socket.SOCK_STREAM,
+                socket.IPPROTO_TCP,
+                "",
+                ("127.0.0.1", 4480),
+            )
+        ]
+        with (
+            patch(
+                "controllers.bridge_client.socket.getaddrinfo",
+                return_value=addresses,
+            ),
+            patch(
+                "controllers.bridge_client.socket.socket",
+                return_value=connecting_socket,
+            ),
+        ):
+            client_thread = threading.Thread(target=run_client)
+            client_thread.start()
+            self.assertTrue(
+                connecting_socket.connect_started.wait(timeout=2.0),
+                "bridge client did not start connecting",
+            )
+            client.close()
+            client_thread.join(timeout=3.0)
 
         self.assertFalse(client_thread.is_alive(), "connection retry did not stop")
         self.assertTrue(backend.closed)
+        self.assertTrue(connecting_socket.closed.is_set())
         self.assertTrue(client_errors)
         self.assertEqual(str(client_errors[0]), "Bridge connection was cancelled")
 
@@ -157,6 +205,20 @@ class ScreenFrameBufferTest(unittest.TestCase):
         self.assertEqual(len(tiles), 1)
         self.assertEqual(tiles[0].rgba, latest_pixels)
         self.assertEqual(screen.snapshot()[2][4:12], latest_pixels)
+        self.assertEqual(screen.take_updates()[2:], (False, ()))
+
+    def test_updates_include_matching_atomic_snapshot(self) -> None:
+        screen = ScreenFrameBuffer()
+        screen.apply_frame(0x10, struct.pack("<HH", 2, 1))
+        pixels = bytes((1, 2, 3, 255, 4, 5, 6, 255))
+        tile = struct.pack("<HHHH", 0, 0, 2, 1) + pixels
+        screen.apply_frame(0x11, tile)
+
+        width, height, reset, tiles, snapshot = screen.take_updates_with_snapshot()
+
+        self.assertEqual((width, height, reset), (2, 1, True))
+        self.assertEqual(len(tiles), 1)
+        self.assertEqual(snapshot, pixels)
         self.assertEqual(screen.take_updates()[2:], (False, ()))
 
     def test_rejects_tiles_before_dimensions_and_out_of_bounds_tiles(self) -> None:
