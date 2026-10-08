@@ -44,7 +44,8 @@ variable table, and troubleshooting.
 
 The optional controller client forwards MIDI input over the bridge. Double-click `controller.cmd` to open
 the live firmware screen with MIDI control. The launcher may install hash-pinned MIDI and image dependencies on first run.
-See `docs/running.md` for setup details.
+The Windows client also plays the bridge's master audio through the current default playback device. See
+`docs/running.md` for setup details.
 
 The manual equivalent inside WSL:
 
@@ -88,6 +89,7 @@ queued with a 2 s settle so rapid swaps don't race the firmware.
 - Audio: the firmware outputs S24_LE 6 channels at 44.1 kHz; `wsl_capture` converts to S16 stereo master
   (`/tmp/rx3-master.raw`) and cue (`/tmp/rx3-cue.raw`) with real-time pacing, since the null ALSA device
   does not pace.
+- The bridge streams master PCM to the Windows client. The cue capture remains local to WSL.
 - The centre waveform is drawn by the firmware through the i.MX G2D; `g2d-shim.c` implements the calls in
   software on the framebuffer file.
 - Jog scaling is approximate (40 ticks per revolution, DDJ-400 style).

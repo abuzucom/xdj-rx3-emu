@@ -6,6 +6,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 One deviation applies. A version heading parenthesizes the release date.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] (2026-10-08)
+
+### Added
+- The Windows controller client plays master PCM through the default audio device.
+- Bounded PCM buffering limits stale playback latency.
+- The bridge client routes master PCM frames to the Windows audio sink.
+
 ## [0.8.1] (2026-10-08)
 
 ### Fixed

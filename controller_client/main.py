@@ -69,11 +69,29 @@ def main(argv: list[str] | None = None) -> int:
     else:
         raise ValueError(f"Unsupported backend: {args.backend}")
 
+    from controller_client.audio import create_default_audio_sink
+
+    audio_sink = create_default_audio_sink()
     if viewer_runner is not None:
         # The viewer owns the BridgeClient through window shutdown.
+        if audio_sink is not None:
+            return viewer_runner(
+                backend,
+                args.bridge_host,
+                args.bridge_port,
+                audio_sink=audio_sink,
+            )
         return viewer_runner(backend, args.bridge_host, args.bridge_port)
 
-    client = BridgeClient(backend, args.bridge_host, args.bridge_port)
+    if audio_sink is None:
+        client = BridgeClient(backend, args.bridge_host, args.bridge_port)
+    else:
+        client = BridgeClient(
+            backend,
+            args.bridge_host,
+            args.bridge_port,
+            audio_sink=audio_sink,
+        )
     try:
         client.run()
     except KeyboardInterrupt:

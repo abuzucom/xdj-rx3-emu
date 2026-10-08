@@ -168,6 +168,11 @@ client share one bridge connection. Use a Python installation with Tcl/Tk
 support for visual mode. Pillow preserves thin text and lines when resizing
 the screen. The controller requirements include its pinned version and hashes.
 
+On Windows, the controller client plays bridge master audio through the default
+multimedia output device. Windows applies the system and application mixer
+levels. Playback works with `--headless` and visual mode. The bridge currently
+does not send the cue capture to the client.
+
 Use `--bridge-host` and `--bridge-port` to target a non-default bridge.
 Place custom JSON profiles in `controllers/profiles/` before using `--profile`.
 See `controllers/profiles/default.json` for the schema.

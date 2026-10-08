@@ -17,6 +17,7 @@ from controllers.bridge_client import BridgeClient, BridgeConnectionError
 from controllers.screen import RGBA_BYTES_PER_PIXEL, ScreenFrameBuffer
 
 if TYPE_CHECKING:
+    from controller_client.audio import AudioSink
     from controllers.backends.base import ControllerBackend
 
 FRAME_INTERVAL_MILLISECONDS = 33
@@ -90,6 +91,7 @@ class ScreenViewer:
         *,
         root: tk.Tk | None = None,
         client_factory: Callable[..., BridgeClient] | None = None,
+        audio_sink: AudioSink | None = None,
     ) -> None:
         self._root = root if root is not None else tk.Tk()
         self._root.title("XDJ-RX3 Emulator")
@@ -98,11 +100,14 @@ class ScreenViewer:
         self._root.configure(background=BACKGROUND_COLOR)
         self._screen = ScreenFrameBuffer()
         create_client = client_factory or BridgeClient
+        client_options: dict[str, object] = {"screen_buffer": self._screen}
+        if audio_sink is not None:
+            client_options["audio_sink"] = audio_sink
         self._client = create_client(
             backend,
             host,
             port,
-            screen_buffer=self._screen,
+            **client_options,
         )
         self._client_thread = threading.Thread(
             target=self._run_client,
@@ -246,14 +251,28 @@ class ScreenViewer:
             logging.warning("RX3 screen client thread did not stop after window close")
 
 
-def run_viewer(backend: ControllerBackend, host: str, port: int) -> int:
+def run_viewer(
+    backend: ControllerBackend,
+    host: str,
+    port: int,
+    *,
+    audio_sink: AudioSink | None = None,
+) -> int:
     """Open the live RX3 screen and return after the window closes."""
     try:
         with ExitStack() as startup:
             startup.callback(backend.close)
+            if audio_sink is not None:
+                startup.callback(audio_sink.close)
             root = tk.Tk()
             startup.callback(root.destroy)
-            viewer = ScreenViewer(backend, host, port, root=root)
+            viewer = ScreenViewer(
+                backend,
+                host,
+                port,
+                root=root,
+                audio_sink=audio_sink,
+            )
             startup.pop_all()
     except tk.TclError as exc:
         raise RuntimeError("Could not open the RX3 screen window. Check Python Tcl/Tk support.") from exc
