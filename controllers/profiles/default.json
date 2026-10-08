@@ -1,0 +1,15 @@
+{
+  "name": "default",
+  "buttons": {
+    "36": {"key": "PLAY", "channel": 0},
+    "37": {"key": "LOAD", "channel": 0},
+    "38": {"key": "SOURCE", "channel": 0}
+  },
+  "faders": {
+    "1": {"key": "TEMPO", "channel": 0, "analog_scale": [-1.0, 1.0]}
+  },
+  "encoders": {
+    "2": {"key": "BROWSE", "channel": 0}
+  },
+  "jog": {"key": "JOG", "channel": 0}
+}

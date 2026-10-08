@@ -6,6 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 One deviation applies. A version heading parenthesizes the release date.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] (2026-10-08)
+
+### Added
+- New `controllers/` package for sending controller input to the emulator bridge:
+  - `controllers/events.py` defines semantic events (`ButtonEvent`, `JogEvent`, `FaderEvent`, `EncoderEvent`) and serializes them to bridge `0x30` key-command frames.
+  - `controllers/profiles.py` loads JSON device profiles mapping MIDI notes/CC/pitch-bend to firmware keys; a default profile ships at `controllers/profiles/default.json`.
+  - `controllers/backends/midi.py` implements a MIDI backend via optional `mido`/`python-rtmidi` dependencies.
+  - `controllers/bridge_client.py` connects a backend to `127.0.0.1:4480` and forwards events, reusing `scripts/smoke_test.py` framing.
+- New `controller_client/main.py` CLI with `--backend`, `--bridge-host`, `--bridge-port`, `--profile`, and `--midi-port` options.
+- `requirements-controllers.txt` pins optional runtime dependencies with SHA-256 hashes.
+- `docs/running.md` documents MIDI controller setup.
+
 ## [0.5.4] (2026-10-08)
 
 ### Fixed

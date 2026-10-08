@@ -132,6 +132,26 @@ The sync is one-way: your folder is never modified. The firmware's own writes (t
 
 For extra control, set `RX3_USB1_ALLOWED_ROOT` to a parent folder. The source path must then resolve inside that folder. Confinement is enforced in WSL, where rsync runs.
 
+## Connecting a controller
+
+The optional controller client forwards MIDI input to the emulator bridge as firmware key commands.
+
+Install the optional dependencies:
+
+```powershell
+python -m pip install -r requirements-controllers.txt
+```
+
+Run the client after the emulator is bridge-ready:
+
+```powershell
+python -m controller_client.main --backend midi --midi-port "MIDI Controller"
+```
+
+Or double-click `controller.cmd` on Windows. It installs the optional dependencies if they are missing and starts the MIDI client.
+
+Use `--bridge-host` and `--bridge-port` to target a non-default bridge. Use `--profile` to load a custom JSON mapping from MIDI messages to firmware keys. See `controllers/profiles/default.json` for the schema.
+
 ## Connecting a client
 
 Connect to TCP 127.0.0.1:4480. Frames use the layout `[type u8][len u32 LE][payload]`. The README protocol table lists every frame type. Run `python scripts/smoke_test.py --action client` to verify a running bridge.
