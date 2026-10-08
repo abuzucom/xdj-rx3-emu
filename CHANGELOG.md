@@ -6,6 +6,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 One deviation applies. A version heading parenthesizes the release date.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.2] (2026-10-08)
+
+### Fixed
+- The viewer reports expected bridge failures and lets unexpected client errors escape.
+- Viewer shutdown propagates client-close errors after UI cleanup.
+- Hook coverage tests exercise UNC and PowerShell payload classifications.
+
 ## [0.7.1] (2026-10-08)
 
 ### Fixed

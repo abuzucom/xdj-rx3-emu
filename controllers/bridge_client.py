@@ -17,6 +17,10 @@ if TYPE_CHECKING:
     from controllers.screen import ScreenFrameBuffer
 
 
+class BridgeConnectionError(RuntimeError):
+    """Report a bridge connection failure or a cancelled connection attempt."""
+
+
 class BridgeClient:
     """Forward controller events to the emulator bridge over TCP."""
 
@@ -108,7 +112,7 @@ class BridgeClient:
         last_error: Exception | None = None
         while True:
             if self._closed.is_set():
-                raise RuntimeError("Bridge connection was cancelled")
+                raise BridgeConnectionError("Bridge connection was cancelled")
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 break
@@ -123,7 +127,9 @@ class BridgeClient:
                 if remaining <= 0:
                     break
                 time.sleep(min(self.CONNECT_RETRY_INTERVAL_SECONDS, remaining))
-        raise RuntimeError(f"Could not connect to bridge at {self.host}:{self.port}") from last_error
+        raise BridgeConnectionError(
+            f"Could not connect to bridge at {self.host}:{self.port}"
+        ) from last_error
 
     def _send(self, event: ControllerEvent) -> None:
         sock = self._sock

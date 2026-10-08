@@ -9,7 +9,7 @@ import tkinter as tk
 from fractions import Fraction
 from typing import TYPE_CHECKING
 
-from controllers.bridge_client import BridgeClient
+from controllers.bridge_client import BridgeClient, BridgeConnectionError
 from controllers.screen import ScreenFrameBuffer
 
 if TYPE_CHECKING:
@@ -122,9 +122,13 @@ class ScreenViewer:
             self._client.run()
             if not self._closing:
                 self._status_queue.put("Bridge disconnected")
-        except Exception as exc:
-            logging.exception("RX3 screen client stopped unexpectedly")
-            self._status_queue.put(type(exc).__name__)
+        except (BridgeConnectionError, OSError) as exc:
+            logging.warning(
+                "RX3 screen client stopped: %s",
+                type(exc).__name__,
+            )
+            if not self._closing:
+                self._status_queue.put(type(exc).__name__)
 
     def _refresh_screen(self) -> None:
         if self._closing:
@@ -202,11 +206,11 @@ class ScreenViewer:
         self._closing = True
         try:
             self._client.close()
-        except Exception:
-            logging.exception("RX3 screen client shutdown failed")
         finally:
-            self._join_client_thread()
-            self._root.destroy()
+            try:
+                self._join_client_thread()
+            finally:
+                self._root.destroy()
 
     def _join_client_thread(self) -> None:
         if self._client_thread is threading.current_thread():
@@ -221,9 +225,11 @@ def run_viewer(backend: ControllerBackend, host: str, port: int) -> int:
     try:
         viewer = ScreenViewer(backend, host, port)
     except Exception as exc:
+        # Release the backend if construction fails before the viewer owns it.
         try:
             backend.close()
         except Exception:
+            # Preserve the startup exception if backend cleanup also fails.
             logging.exception("Controller backend cleanup failed after viewer startup")
         if isinstance(exc, tk.TclError):
             raise RuntimeError("Could not open the RX3 screen window. Check Python Tcl/Tk support.") from exc

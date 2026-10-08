@@ -58,6 +58,7 @@ def main(argv: list[str] | None = None) -> int:
         raise ValueError(f"Unsupported backend: {args.backend}")
 
     if viewer_runner is not None:
+        # The viewer owns the BridgeClient through window shutdown.
         return viewer_runner(backend, args.bridge_host, args.bridge_port)
 
     client = BridgeClient(backend, args.bridge_host, args.bridge_port)
