@@ -3,11 +3,11 @@
   "shared": {
     "hooks/_bash_parser.py": "8437b73ff29e36475bd04ffe48aadac6d4fa87fcf45d28070b25654fecfedf98",
     "hooks/_cmd_parser.py": "4212670bc4166a5f89be120ceb6bafbc854d16743ff900f4b596b7b79fa5981b",
-    "hooks/_gate_core.py": "191a1ae07b962d82676d45a4167c4ec5cedb6c7d4fbcdd06ea711d8b056ce488",
+    "hooks/_gate_core.py": "35c6ad48b0fb1ed03c65238e824d979a88f9dbfc7395c29807fedb3b587e2e55",
     "hooks/_platform_policy.py": "9cfbbee6b9a6e9e90d7d8faee8df61cf5d43ee6aa488f1e6aa563499d0d44dd9",
     "hooks/block_destructive_bash.py": "6b73f0117dd7eab36cfc2515ecf59df7dc7bad2df61bba024dbb667029f1dd7d",
     "hooks/block_destructive_cmd.py": "7740e565354e175db1031690a9fb021db01c4ac8205f1c83cfa045e99e2a27d5",
-    "hooks/block_destructive_powershell.py": "7c9f51bb88c9f206804a8fbf3bb88f0e507391f34fa4acaa5535a0ebd03d406d",
+    "hooks/block_destructive_powershell.py": "0092a33ea598df850059c5e25f3ba5c73e3947f28d47364984d044015c9eeda8",
     "hooks/enforce_gate_adoption.py": "85fbd00d2a45e1c2b593523b123638a7365abacb54c6584ac282dd2ae1a9dbec",
     "hooks/github-command-denylist.txt": "0b043edb1beaa5c37d38137e5b958fad35b5fbdad045063ed30fa8c19ee13a13",
     "hooks/reinject_agents_policy.py": "ff694eddfab42ad065dd2fe8f7daf2872fbc4e751aa654ed720f40aff9e17572",

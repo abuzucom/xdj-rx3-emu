@@ -810,13 +810,33 @@ def strip_windows_drive(normalized: str) -> str:
     return normalized[3:] if has_drive else normalized
 
 
+def _is_windows_unc_path(path: str) -> bool:
+    """Return whether a path names a UNC share without touching the share."""
+    if os.name != "nt" and not path.startswith("\\\\"):
+        return False
+    windows_path = path.replace("/", "\\")
+    drive, _ = ntpath.splitdrive(windows_path)
+    folded_drive = drive.casefold()
+    if folded_drive.startswith("\\\\?\\"):
+        return folded_drive.startswith("\\\\?\\unc\\")
+    return folded_drive.startswith("\\\\")
+
+
 def is_protected_infrastructure_path(path: str, cwd: str = "", content: str = "") -> bool:
     """Return whether a path reaches protected infrastructure configuration."""
     candidate = path.strip().strip('"').strip("'")
     if not candidate or candidate.startswith("-"):
         return False
-    absolute = candidate if os.path.isabs(candidate) else os.path.join(cwd or os.getcwd(), candidate)
-    resolved = os.path.realpath(os.path.abspath(absolute))
+    unc_path = _is_windows_unc_path(candidate)
+    if unc_path:
+        absolute = candidate
+    else:
+        absolute = candidate if os.path.isabs(candidate) else os.path.join(cwd or os.getcwd(), candidate)
+        unc_path = _is_windows_unc_path(absolute)
+    if unc_path:
+        resolved = ntpath.normpath(absolute)
+    else:
+        resolved = os.path.realpath(os.path.abspath(absolute))
     normalized = "/" + resolved.replace("\\", "/").casefold().strip("/")
     padded = normalized + ("/" if not normalized.endswith("/") else "")
     basename = normalized.rsplit("/", 1)[-1]
@@ -843,6 +863,8 @@ def is_protected_infrastructure_path(path: str, cwd: str = "", content: str = ""
     if basename.startswith("pulumi.") and basename.endswith((".yaml", ".yml", ".json")):
         return True
     if basename.endswith((".yaml", ".yml", ".json")):
+        if unc_path and not content:
+            return True
         manifest = content or _infrastructure_manifest_text(resolved)
         lowered = manifest.casefold()
         return (("apiversion:" in lowered and "kind:" in lowered)
@@ -1484,6 +1506,8 @@ def _protected_path(path: str, cwd: str) -> bool:
     """Return True when a literal path is under a protected gate directory."""
     cleaned = path.strip().strip('"').strip("'")
     if not cleaned or is_ambiguous(cleaned):
+        return False
+    if _is_windows_unc_path(cleaned):
         return False
     root = os.path.realpath(cwd or ".")
     candidate = cleaned if os.path.isabs(cleaned) else os.path.join(root, cleaned)
