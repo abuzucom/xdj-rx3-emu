@@ -1,5 +1,5 @@
 @echo off
-REM One-click MIDI controller client launcher for the XDJ-RX3 emulator.
+REM One-click MIDI controller and RX3 screen launcher.
 REM Installs optional dependencies if they are missing, then runs the client.
 
 setlocal enabledelayedexpansion
@@ -14,4 +14,4 @@ if errorlevel 1 (
     )
 )
 
-python -m controller_client.main %*
+python -m controller_client.main --view %*
