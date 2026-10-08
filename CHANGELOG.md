@@ -10,6 +10,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 - The bridge client decodes and assembles firmware screen frames.
+- `controller.cmd` opens a live firmware screen while the MIDI client runs.
+- The screen viewer renders changed RGBA tiles at up to 30 frames per second.
 
 ## [0.6.5] (2026-10-07)
 

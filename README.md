@@ -41,8 +41,9 @@ recovery tooling, verifies the firmware archive, builds the chroot, seeds a virt
 the player with the bridge. See `docs/running.md` for requirements, the manual setup path, the environment
 variable table, and troubleshooting.
 
-The optional controller client forwards MIDI input over the bridge. Double-click `controller.cmd` to start it.
-The launcher may install hashed MIDI dependencies on first run. See `docs/running.md` for setup details.
+The optional controller client forwards MIDI input over the bridge. Double-click `controller.cmd` to open
+the live firmware screen with MIDI control. The launcher may install hashed MIDI dependencies on first run.
+See `docs/running.md` for setup details.
 
 The manual equivalent inside WSL:
 

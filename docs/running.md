@@ -147,16 +147,24 @@ Install the optional dependencies:
 python -m pip install --require-hashes -r requirements-controllers.txt
 ```
 
-Run the client after the emulator is bridge-ready:
+Run the direct Python client after the emulator is bridge-ready:
 
 ```powershell
 python -m controller_client.main --backend midi --midi-port "MIDI Controller"
 ```
 
-Or double-click `controller.cmd` on Windows. It checks for both MIDI packages.
-It installs them with pip hash verification if either package is missing.
-It starts the MIDI client. Run the explicit pip command above before using
-`controller.cmd` to control when installation occurs.
+The direct Python client runs headless by default. Add `--view` to show the live
+firmware screen.
+
+Double-click `controller.cmd` on Windows to open the live firmware screen while
+the MIDI client runs. It checks for both MIDI packages. It installs them with
+pip hash verification if either package is missing. Add `--headless` to start
+the launcher without the screen window. Run the explicit pip command above
+before using `controller.cmd` to control when installation occurs.
+
+The screen window renders the bridge's 1280x800 RGBA tiles. The viewer and MIDI
+client share one bridge connection. Use a Python installation with Tcl/Tk
+support for visual mode.
 
 Use `--bridge-host` and `--bridge-port` to target a non-default bridge.
 Place custom JSON profiles in `controllers/profiles/` before using `--profile`.
