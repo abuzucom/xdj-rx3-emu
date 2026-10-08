@@ -18,7 +18,7 @@ import subprocess
 import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 WSL_SOURCE_DIR = REPO_ROOT / "wsl"
@@ -247,7 +247,7 @@ def _resolve_usb1_source(options: Options) -> str | None:
 
 def _validate_windows_drive_path(windows_path: str, label: str) -> None:
     """Validate that a Windows path is drive-letter absolute with no traversal."""
-    p = Path(windows_path)
+    p = PureWindowsPath(windows_path)
     if not p.is_absolute():
         raise BootstrapError(f"{label} path must be absolute: {windows_path!r}")
     if any(part == ".." for part in p.parts):
@@ -259,11 +259,11 @@ def _validate_windows_drive_path(windows_path: str, label: str) -> None:
 
 def _wsl_path_from_windows(windows_path: str) -> str:
     """Translate a Windows drive-letter path to a WSL /mnt path."""
-    _validate_windows_drive_path(windows_path, "USB source path")
-    p = Path(windows_path)
+    _validate_windows_drive_path(windows_path, "USB source")
+    p = PureWindowsPath(windows_path)
     drive = p.drive[0].lower()
     # Reconstruct from parts to drop any trailing separator.
-    return f"/mnt/{drive}/" + "/".join(Path(*p.parts).parts[1:])
+    return f"/mnt/{drive}/" + "/".join(p.parts[1:])
 
 
 def sync_usb1_source(runner: CommandRunner, windows_source: str) -> None:
