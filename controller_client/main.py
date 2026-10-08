@@ -44,6 +44,11 @@ def main(argv: list[str] | None = None) -> int:
         try:
             from controller_client.viewer import run_viewer
         except ModuleNotFoundError as exc:
+            if exc.name == "PIL":
+                raise RuntimeError(
+                    "Visual mode requires Pillow. Install it with: "
+                    "python -m pip install --require-hashes -r requirements-viewer.txt"
+                ) from exc
             if exc.name not in {"tkinter", "_tkinter"}:
                 raise
             raise RuntimeError(

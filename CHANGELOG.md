@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 One deviation applies. A version heading parenthesizes the release date.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.4] (2026-10-08)
+
+### Fixed
+- The live viewer preserves screen detail at fractional window scales.
+- Antialiased resizing prevents enlarged blocks and preserves thin text and lines.
+- The launcher and CI install hash-pinned Pillow 12.3.0 for screen resizing.
+- Regression tests cover thin strokes, channel values, and full-screen tile conversion.
+
 ## [0.7.3] (2026-10-08)
 
 ### Fixed

@@ -42,7 +42,7 @@ the player with the bridge. See `docs/running.md` for requirements, the manual s
 variable table, and troubleshooting.
 
 The optional controller client forwards MIDI input over the bridge. Double-click `controller.cmd` to open
-the live firmware screen with MIDI control. The launcher may install hashed MIDI dependencies on first run.
+the live firmware screen with MIDI control. The launcher may install hash-pinned MIDI and image dependencies on first run.
 See `docs/running.md` for setup details.
 
 The manual equivalent inside WSL:

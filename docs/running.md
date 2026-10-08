@@ -159,12 +159,14 @@ firmware screen.
 Double-click `controller.cmd` on Windows to open the live firmware screen while
 the MIDI client runs. It checks for both MIDI packages. It installs them with
 pip hash verification if either package is missing. Add `--headless` to start
-the launcher without the screen window. Run the explicit pip command above
+the launcher without the screen window. The dependency check also verifies
+Pillow 12.3.0 for antialiased screen resizing. Run the explicit pip command above
 before using `controller.cmd` to control when installation occurs.
 
 The screen window renders the bridge's 1280x800 RGBA tiles. The viewer and MIDI
 client share one bridge connection. Use a Python installation with Tcl/Tk
-support for visual mode.
+support for visual mode. Pillow preserves thin text and lines when resizing
+the screen. The controller requirements include its pinned version and hashes.
 
 Use `--bridge-host` and `--bridge-port` to target a non-default bridge.
 Place custom JSON profiles in `controllers/profiles/` before using `--profile`.

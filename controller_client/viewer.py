@@ -11,8 +11,10 @@ from contextlib import ExitStack
 from fractions import Fraction
 from typing import TYPE_CHECKING
 
+from PIL import Image
+
 from controllers.bridge_client import BridgeClient, BridgeConnectionError
-from controllers.screen import ScreenFrameBuffer
+from controllers.screen import RGBA_BYTES_PER_PIXEL, ScreenFrameBuffer
 
 if TYPE_CHECKING:
     from controllers.backends.base import ControllerBackend
@@ -63,6 +65,20 @@ def calculate_display_scale(
     return ratio
 
 
+def resize_rgba(width: int, height: int, rgba: bytes, target_size: tuple[int, int]) -> bytes:
+    """Preserve thin screen details with antialiased image resizing."""
+    target_width, target_height = target_size
+    if min(width, height, target_width, target_height) <= 0:
+        raise ValueError("Image dimensions must be positive")
+    if len(rgba) != width * height * RGBA_BYTES_PER_PIXEL:
+        raise ValueError("RGBA length does not match image dimensions")
+    if target_size == (width, height):
+        return rgba
+    with Image.frombytes("RGBA", (width, height), rgba) as source:
+        with source.resize(target_size, resample=Image.Resampling.BICUBIC) as resized:
+            return resized.tobytes()
+
+
 class ScreenViewer:
     """Render screen updates while the bridge client forwards MIDI events."""
 
@@ -96,6 +112,7 @@ class ScreenViewer:
         self._status_queue: queue.SimpleQueue[str] = queue.SimpleQueue()
         self._status = tk.StringVar(master=self._root, value="Connecting to emulator bridge")
         self._source_image: tk.PhotoImage | None = None
+        self._source_pixels = b""
         self._display_image: tk.PhotoImage | None = None
         self._closing = False
         self._resize_pending = True
@@ -154,6 +171,7 @@ class ScreenViewer:
         if reset or tiles:
             ppm_data = rgba_to_ppm(width, height, pixels)
             self._source_image = tk.PhotoImage(data=ppm_data, format="PPM")
+            self._source_pixels = pixels
             self._resize_pending = True
         if self._source_image is not None and (reset or tiles or self._resize_pending):
             self._render_screen()
@@ -185,18 +203,15 @@ class ScreenViewer:
         else:
             scaled_width = self._scaled_dimension(self._source_image.width(), ratio)
             scaled_height = self._scaled_dimension(self._source_image.height(), ratio)
-            display_image = tk.PhotoImage(width=scaled_width, height=scaled_height)
-            display_image.tk.call(
-                str(display_image),
-                "copy",
-                str(self._source_image),
-                "-zoom",
-                ratio.numerator,
-                ratio.numerator,
-                "-subsample",
-                ratio.denominator,
-                ratio.denominator,
+            # Tk subsamples before zooming and discards detail at fractional scales.
+            pixels = resize_rgba(
+                self._source_image.width(),
+                self._source_image.height(),
+                self._source_pixels,
+                (scaled_width, scaled_height),
             )
+            ppm_data = rgba_to_ppm(scaled_width, scaled_height, pixels)
+            display_image = tk.PhotoImage(master=self._canvas, data=ppm_data, format="PPM")
         center_x = canvas_width // 2
         center_y = canvas_height // 2
         self._canvas.coords(self._image_item, center_x, center_y)
