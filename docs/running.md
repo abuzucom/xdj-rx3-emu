@@ -172,6 +172,40 @@ Use `--bridge-host` and `--bridge-port` to target a non-default bridge.
 Place custom JSON profiles in `controllers/profiles/` before using `--profile`.
 See `controllers/profiles/default.json` for the schema.
 
+### DJ2GO2 Touch control verification
+
+The `dj2go2-touch.json` profile currently maps only left-deck Play/Pause.
+MIDI channel 0, note 0 targets RX3 deck 1.
+Other controls remain unmapped during individual control verification.
+The left Play/Pause LED follows firmware state in viewer and headless modes.
+Paused playback blinks at the firmware period. Playing produces a steady light.
+Orderly shutdown clears the controlled LED.
+Other LEDs remain outside this individual-control verification stage.
+
+The client selects the unique DJ2GO2 Touch MIDI output automatically.
+Use `--midi-output "PORT NAME"` to select an explicit output.
+Use `--no-led-feedback` to disable output.
+Missing or ambiguous output ports produce a warning without stopping input.
+Missing firmware snapshots also produce a warning.
+
+LED transport requires the updated WSL bridge and a rebuilt firmware shim.
+The WSL build adapts the LED scanner to QEMU guest memory maps.
+Existing installations require that rebuild before receiving LED snapshots.
+The bridge sends complete RXL1 snapshots through frame type `0x17`.
+
+```powershell
+python -m controller_client.main --view --profile dj2go2-touch.json --midi-port "DJ2GO2 Touch MIDI 4"
+```
+
+Use the current device port name if Windows assigns a different suffix.
+Load a track on firmware deck 1 before verifying Play/Pause.
+Press and release the left Play/Pause button once after the input session starts.
+Confirm the playback state changes on deck 1 only.
+
+Button entries accept optional `midi_channel` values from 0 through 15.
+The existing `channel` field selects the firmware destination.
+Omitting `midi_channel` preserves matching across all MIDI input channels.
+
 ## Connecting a client
 
 Connect to TCP 127.0.0.1:4480. Frames use the layout `[type u8][len u32 LE][payload]`. The README protocol table lists every frame type. Run `python scripts/smoke_test.py --action client` to verify a running bridge.

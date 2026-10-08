@@ -26,6 +26,7 @@ holds the emulation harness, shims and bridge written for it.
 | | `0x11` | screen tile: x, y, w, h (u16) + RGBA8888 pixels |
 | | `0x14` | audio: rate u32, channels u8, S16LE interleaved |
 | | `0x16` | engine state text (answer to `query`) |
+| | `0x17` | complete 1048-byte RXL1 firmware LED snapshot |
 | client -> bridge | `0x30` | key command: key i32, op i32, channel i32, value i32, analog f32 (firmware's control device) |
 | | `0x31` | touch: down u8, x u16, y u16 (screen pixels; streamed while down) |
 | | `0x32` | USB event text: `insert usb1 <windows path>` / `eject usb1` |
@@ -61,6 +62,10 @@ Environment: `RX3_NOBRIDGE=1` (player only), `RX3_TIMEOUT=N` (auto-stop after N 
 pitch (`measure-pitch.py`), swap and eject sticks.
 
 ## Smoke test utility
+
+The DJ2GO2 Touch profile currently supports left-deck Play/Pause and its firmware LED feedback.
+See [controller verification](docs/running.md#dj2go2-touch-control-verification)
+for the launch command and current limitations.
 
 `scripts/smoke_test.py` downloads and verifies the `XDJ-RX3_v120.zip` archive against
 `firmware/firmware.sha256`, extracts the payload, and validates the bridge protocol against a mock server.

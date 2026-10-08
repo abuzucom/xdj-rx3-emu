@@ -198,7 +198,7 @@ class BridgeClient:
         sock = self._sock
         if sock is None:
             return
-        decoder = FrameStreamDecoder() if self.screen_buffer is not None else None
+        decoder = FrameStreamDecoder()
         try:
             self._receive_inbound_frames(sock, decoder)
         finally:
@@ -231,10 +231,12 @@ class BridgeClient:
             # The length-prefixed protocol has no sync marker for safe recovery.
             self._running.clear()
             return
-        if self.screen_buffer is None:
-            return
         for message_type, payload in frames:
             try:
-                self.screen_buffer.apply_frame(message_type, payload)
+                receiver = getattr(self.backend, "receive_feedback", None)
+                if message_type == 0x17 and receiver is not None:
+                    receiver(payload)
+                elif self.screen_buffer is not None:
+                    self.screen_buffer.apply_frame(message_type, payload)
             except ValueError as exc:
-                logging.warning("Bridge screen frame rejected: %s", exc)
+                logging.warning("Bridge frame rejected: %s", exc)
