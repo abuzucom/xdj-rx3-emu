@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 One deviation applies. A version heading parenthesizes the release date.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.1] (2026-10-08)
+
+### Fixed
+- Share RXL1 layout constants between the desktop decoder and standalone bridge.
+- Quote shim build paths to preserve arguments containing spaces.
+- Document single-writer snapshot assumptions and consumer validation.
+- Add regression coverage for headless oversized-frame rejection.
+
 ## [0.8.0] (2026-10-08)
 
 ### Added
