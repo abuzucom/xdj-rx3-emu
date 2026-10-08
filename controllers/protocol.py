@@ -11,12 +11,43 @@ MAX_FRAME_LENGTH = 1_048_576
 FRAME_HEADER_SIZE = 5
 DEFAULT_READ_TIMEOUT_SECONDS = 5.0
 DEFAULT_BRIDGE_PORT = 4480
+FRAME_HEADER_FORMAT = "<BI"
 
 
 def write_frame(sock: socket.socket, msg_type: int, payload: bytes) -> None:
     """Send a frame using the bridge wire layout."""
-    header = struct.pack("<BI", msg_type, len(payload))
+    header = struct.pack(FRAME_HEADER_FORMAT, msg_type, len(payload))
     sock.sendall(header + payload)
+
+
+class FrameStreamDecoder:
+    """Decode bridge frames from arbitrarily segmented socket data."""
+
+    def __init__(self, max_frame_length: int = MAX_FRAME_LENGTH) -> None:
+        if max_frame_length < 0:
+            raise ValueError("Maximum frame length cannot be negative")
+        self._max_frame_length = max_frame_length
+        self._buffer = bytearray()
+
+    def feed(self, data: bytes) -> list[tuple[int, bytes]]:
+        """Return complete frames and retain any incomplete trailing bytes."""
+        self._buffer.extend(data)
+        frames = []
+        while len(self._buffer) >= FRAME_HEADER_SIZE:
+            message_type, payload_length = struct.unpack_from(
+                FRAME_HEADER_FORMAT,
+                self._buffer,
+            )
+            if payload_length > self._max_frame_length:
+                self._buffer.clear()
+                raise ValueError("Bridge frame exceeds the configured length limit")
+            frame_length = FRAME_HEADER_SIZE + payload_length
+            if len(self._buffer) < frame_length:
+                break
+            payload = bytes(self._buffer[FRAME_HEADER_SIZE:frame_length])
+            del self._buffer[:frame_length]
+            frames.append((message_type, payload))
+        return frames
 
 
 def _apply_read_deadline(sock: socket.socket, deadline: float | None) -> None:

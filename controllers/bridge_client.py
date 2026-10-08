@@ -10,10 +10,11 @@ import time
 from typing import TYPE_CHECKING
 
 from controllers.events import ControllerEvent, serialize_event
-from controllers.protocol import write_frame
+from controllers.protocol import FrameStreamDecoder, write_frame
 
 if TYPE_CHECKING:
     from controllers.backends.base import ControllerBackend
+    from controllers.screen import ScreenFrameBuffer
 
 
 class BridgeClient:
@@ -27,10 +28,17 @@ class BridgeClient:
     INBOUND_BUFFER_SIZE_BYTES = 4096
     READER_JOIN_TIMEOUT_SECONDS = 5.0
 
-    def __init__(self, backend: ControllerBackend, host: str, port: int) -> None:
+    def __init__(
+        self,
+        backend: ControllerBackend,
+        host: str,
+        port: int,
+        screen_buffer: ScreenFrameBuffer | None = None,
+    ) -> None:
         self.backend = backend
         self.host = host
         self.port = port
+        self.screen_buffer = screen_buffer
         self._sock: socket.socket | None = None
         self._running = threading.Event()
         self._closed = threading.Event()
@@ -99,6 +107,8 @@ class BridgeClient:
         deadline = time.monotonic() + self.CONNECT_TIMEOUT
         last_error: Exception | None = None
         while True:
+            if self._closed.is_set():
+                raise RuntimeError("Bridge connection was cancelled")
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 break
@@ -126,21 +136,46 @@ class BridgeClient:
             raise RuntimeError(f"Failed to serialize event {event}") from exc
 
     def _drain_inbound(self) -> None:
-        """Discard inbound bridge frames so the TCP receive buffer does not stall."""
+        """Read screen frames while keeping the bridge receive buffer drained."""
         sock = self._sock
         if sock is None:
             return
+        decoder = FrameStreamDecoder() if self.screen_buffer is not None else None
         try:
-            while self._running.is_set():
-                try:
-                    data = sock.recv(self.INBOUND_BUFFER_SIZE_BYTES)
-                    if not data:
-                        break
-                except TimeoutError:
-                    logging.debug("Bridge inbound frame read timed out")
-                    continue
-                except OSError as exc:
-                    logging.debug("Bridge inbound socket read stopped: %s", type(exc).__name__)
-                    break
+            self._receive_inbound_frames(sock, decoder)
         finally:
             self._running.clear()
+
+    def _receive_inbound_frames(
+        self,
+        sock: socket.socket,
+        decoder: FrameStreamDecoder | None,
+    ) -> None:
+        while self._running.is_set():
+            try:
+                data = sock.recv(self.INBOUND_BUFFER_SIZE_BYTES)
+            except TimeoutError:
+                logging.debug("Bridge inbound frame read timed out")
+                continue
+            except OSError as exc:
+                logging.debug("Bridge inbound socket read stopped: %s", type(exc).__name__)
+                return
+            if not data:
+                return
+            if decoder is not None:
+                self._apply_inbound_data(decoder, data)
+
+    def _apply_inbound_data(self, decoder: FrameStreamDecoder, data: bytes) -> None:
+        try:
+            frames = decoder.feed(data)
+        except ValueError as exc:
+            logging.warning("Bridge frame decoding stopped: %s", exc)
+            self._running.clear()
+            return
+        if self.screen_buffer is None:
+            return
+        for message_type, payload in frames:
+            try:
+                self.screen_buffer.apply_frame(message_type, payload)
+            except ValueError as exc:
+                logging.warning("Bridge screen frame rejected: %s", exc)
