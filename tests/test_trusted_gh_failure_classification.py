@@ -4,7 +4,6 @@ import io
 import os
 import subprocess
 import sys
-import tempfile
 import unittest
 from contextlib import redirect_stderr
 from pathlib import Path
@@ -39,10 +38,15 @@ class FailureClassificationTest(unittest.TestCase):
             kwargs["runner"] = runner
             return real_run_gh(repo_root, arguments, **kwargs)
 
-        with patch.object(trusted_gh, "resolve_gh", return_value=sys.executable):
-            with patch.object(trusted_gh, "run_gh", side_effect=run_gh):
-                with self.assertRaises(trusted_gh.GitHubAccessError) as context:
-                    trusted_gh.authenticated_account(Path(tempfile.gettempdir()))
+        with patch.object(
+            trusted_gh, "_safe_directory", return_value=REPOSITORY_ROOT
+        ):
+            with patch.object(trusted_gh, "resolve_gh", return_value=sys.executable):
+                with patch.object(trusted_gh, "run_gh", side_effect=run_gh):
+                    with self.assertRaises(
+                        trusted_gh.GitHubAccessError
+                    ) as context:
+                        trusted_gh.authenticated_account(REPOSITORY_ROOT)
         return context.exception
 
     def test_auth_required_exit_code_is_authentication(self):

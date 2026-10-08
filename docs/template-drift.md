@@ -74,7 +74,13 @@ Every taken file not listed here matches its source byte for byte.
   `tests/`, `tools/`, and the agents scripts. Those copies stay byte-identical
   with the sources. The rough block tier reports 168 findings in the copies.
 - `hook-coverage-baseline.json` is the template file, copied rather than
-  regenerated. Every file under `hooks/` matches the template.
+  regenerated. The remaining files under `hooks/` match the template except
+  for the deliberate differences listed below.
+- `hooks/block_destructive_powershell.py` returns established deny verdicts
+  before running later filesystem checks. This avoids resolving remote UNC
+  paths after another policy check has already blocked the command.
+- `hooks/_gate_core.py` checks UNC paths lexically. The path checks avoid
+  filesystem resolution against remote shares.
 
 ## Environment limitations
 

@@ -272,6 +272,8 @@ def _program_verdict(tokens: list, redirects: list, depth: int) -> tuple:
     )
     policy = core.strongest(
         policy, core.cloudflare_pages_verdict(program, args, _CWD[0]))
+    if policy[0] == "deny":
+        return policy
     named = _named_program_verdict(program, args, depth)
     if named is not None:
         return core.strongest(policy, named)
