@@ -6,6 +6,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 One deviation applies. A version heading parenthesizes the release date.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] (2026-10-08)
+
+### Added
+- Left Play/Pause LED feedback supports firmware blinking and orderly shutdown clearing.
+- MIDI output selection and feedback disabling use optional CLI flags.
+- Setup documentation defines the verified left Play/Pause baseline.
+
 ## [0.8.0-alpha.2] (2026-10-08)
 
 ### Added
