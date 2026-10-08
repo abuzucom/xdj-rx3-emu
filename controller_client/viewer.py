@@ -6,6 +6,8 @@ import logging
 import queue
 import threading
 import tkinter as tk
+from collections.abc import Callable
+from contextlib import ExitStack
 from fractions import Fraction
 from typing import TYPE_CHECKING
 
@@ -21,6 +23,8 @@ MAX_DISPLAY_SCALE = 2.0
 CLIENT_THREAD_JOIN_TIMEOUT_SECONDS = 3.0
 INITIAL_WINDOW_WIDTH = 960
 INITIAL_WINDOW_HEIGHT = 600
+MIN_WINDOW_WIDTH = 320
+MIN_WINDOW_HEIGHT = 200
 BACKGROUND_COLOR = "#000000"
 
 
@@ -67,14 +71,23 @@ class ScreenViewer:
         backend: ControllerBackend,
         host: str,
         port: int,
+        *,
+        root: tk.Tk | None = None,
+        client_factory: Callable[..., BridgeClient] | None = None,
     ) -> None:
-        self._root = tk.Tk()
+        self._root = root if root is not None else tk.Tk()
         self._root.title("XDJ-RX3 Emulator")
         self._root.geometry(f"{INITIAL_WINDOW_WIDTH}x{INITIAL_WINDOW_HEIGHT}")
-        self._root.minsize(320, 200)
+        self._root.minsize(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT)
         self._root.configure(background=BACKGROUND_COLOR)
         self._screen = ScreenFrameBuffer()
-        self._client = BridgeClient(backend, host, port, screen_buffer=self._screen)
+        create_client = client_factory or BridgeClient
+        self._client = create_client(
+            backend,
+            host,
+            port,
+            screen_buffer=self._screen,
+        )
         self._client_thread = threading.Thread(
             target=self._run_client,
             name="rx3-controller-client",
@@ -89,8 +102,8 @@ class ScreenViewer:
         self._create_widgets()
         self._root.protocol("WM_DELETE_WINDOW", self._close)
         self._canvas.bind("<Configure>", self._handle_resize)
-        self._client_thread.start()
         self._root.after(0, self._refresh_screen)
+        self._client_thread.start()
 
     def run(self) -> None:
         """Run the Tk event loop and close the client on exit."""
@@ -134,13 +147,11 @@ class ScreenViewer:
         if self._closing:
             return
         self._refresh_status()
-        width, height, reset, tiles = self._screen.take_updates()
+        width, height, reset, tiles, pixels = self._screen.take_updates_with_snapshot()
         if reset:
-            self._source_image = tk.PhotoImage(width=width, height=height)
             self._status.set(f"Live RX3 screen: {width}x{height}")
             self._resize_pending = True
-        if tiles:
-            width, height, pixels = self._screen.snapshot()
+        if reset or tiles:
             ppm_data = rgba_to_ppm(width, height, pixels)
             self._source_image = tk.PhotoImage(data=ppm_data, format="PPM")
             self._resize_pending = True
@@ -186,11 +197,11 @@ class ScreenViewer:
                 ratio.denominator,
                 ratio.denominator,
             )
-        self._display_image = display_image
         center_x = canvas_width // 2
         center_y = canvas_height // 2
         self._canvas.coords(self._image_item, center_x, center_y)
-        self._canvas.itemconfigure(self._image_item, image=self._display_image)
+        self._canvas.itemconfigure(self._image_item, image=display_image)
+        self._display_image = display_image
 
     @staticmethod
     def _scaled_dimension(source_size: int, ratio: Fraction) -> int:
@@ -223,16 +234,13 @@ class ScreenViewer:
 def run_viewer(backend: ControllerBackend, host: str, port: int) -> int:
     """Open the live RX3 screen and return after the window closes."""
     try:
-        viewer = ScreenViewer(backend, host, port)
-    except Exception as exc:
-        # Release the backend if construction fails before the viewer owns it.
-        try:
-            backend.close()
-        except Exception:
-            # Preserve the startup exception if backend cleanup also fails.
-            logging.exception("Controller backend cleanup failed after viewer startup")
-        if isinstance(exc, tk.TclError):
-            raise RuntimeError("Could not open the RX3 screen window. Check Python Tcl/Tk support.") from exc
-        raise
+        with ExitStack() as startup:
+            startup.callback(backend.close)
+            root = tk.Tk()
+            startup.callback(root.destroy)
+            viewer = ScreenViewer(backend, host, port, root=root)
+            startup.pop_all()
+    except tk.TclError as exc:
+        raise RuntimeError("Could not open the RX3 screen window. Check Python Tcl/Tk support.") from exc
     viewer.run()
     return 0

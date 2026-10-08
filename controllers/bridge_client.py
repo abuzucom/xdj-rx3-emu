@@ -44,6 +44,7 @@ class BridgeClient:
         self.port = port
         self.screen_buffer = screen_buffer
         self._sock: socket.socket | None = None
+        self._connecting_socket: socket.socket | None = None
         self._running = threading.Event()
         self._closed = threading.Event()
         self._reader: threading.Thread | None = None
@@ -53,12 +54,12 @@ class BridgeClient:
         """Block while forwarding events until close() or an error occurs."""
         try:
             if self._closed.is_set():
-                raise RuntimeError("Cannot run a closed bridge client")
+                raise BridgeConnectionError("Bridge connection was cancelled")
             sock = self._connect()
             with self._close_lock:
                 if self._closed.is_set():
                     self._close_socket(sock)
-                    raise RuntimeError("Cannot run a closed bridge client")
+                    raise BridgeConnectionError("Bridge connection was cancelled")
                 self._sock = sock
                 self._running.set()
                 self._reader = threading.Thread(target=self._drain_inbound, daemon=True)
@@ -81,7 +82,11 @@ class BridgeClient:
             self._running.clear()
             sock = self._sock
             self._sock = None
+            connecting_socket = self._connecting_socket
+            self._connecting_socket = None
         try:
+            if connecting_socket is not None:
+                self._close_socket(connecting_socket)
             self.backend.close()
         finally:
             if sock is not None:
@@ -117,17 +122,66 @@ class BridgeClient:
             if remaining <= 0:
                 break
             try:
-                return socket.create_connection(
-                    (self.host, self.port),
-                    timeout=min(self.CONNECT_ATTEMPT_TIMEOUT_SECONDS, remaining),
-                )
+                return self._connect_once(deadline)
+            except BridgeConnectionError:
+                raise
             except OSError as exc:
                 last_error = exc
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     break
-                time.sleep(min(self.CONNECT_RETRY_INTERVAL_SECONDS, remaining))
+                cancelled = self._closed.wait(min(self.CONNECT_RETRY_INTERVAL_SECONDS, remaining))
+                if cancelled:
+                    raise BridgeConnectionError("Bridge connection was cancelled") from exc
         raise BridgeConnectionError(f"Could not connect to bridge at {self.host}:{self.port}") from last_error
+
+    def _connect_once(self, deadline: float) -> socket.socket:
+        """Try each resolved address while exposing sockets to close()."""
+        addresses = socket.getaddrinfo(
+            self.host,
+            self.port,
+            type=socket.SOCK_STREAM,
+        )
+        last_error: OSError | None = None
+        for family, socket_type, protocol, _canonical_name, address in addresses:
+            if self._closed.is_set():
+                raise BridgeConnectionError("Bridge connection was cancelled")
+            connection = socket.socket(family, socket_type, protocol)
+            with self._close_lock:
+                if self._closed.is_set():
+                    cancelled = True
+                else:
+                    self._connecting_socket = connection
+                    cancelled = False
+            if cancelled:
+                self._close_socket(connection)
+                raise BridgeConnectionError("Bridge connection was cancelled")
+            connected = False
+            try:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError("Bridge connection deadline exceeded")
+                connection.settimeout(min(self.CONNECT_ATTEMPT_TIMEOUT_SECONDS, remaining))
+                connection.connect(address)
+                with self._close_lock:
+                    if self._closed.is_set():
+                        raise BridgeConnectionError("Bridge connection was cancelled")
+                    self._connecting_socket = None
+                connected = True
+                return connection
+            except OSError as exc:
+                last_error = exc
+            finally:
+                with self._close_lock:
+                    if self._connecting_socket is connection:
+                        self._connecting_socket = None
+                if not connected:
+                    self._close_socket(connection)
+            if self._closed.is_set():
+                raise BridgeConnectionError("Bridge connection was cancelled") from last_error
+        if last_error is not None:
+            raise last_error
+        raise TimeoutError("Bridge connection has no available address")
 
     def _send(self, event: ControllerEvent) -> None:
         sock = self._sock
@@ -174,6 +228,7 @@ class BridgeClient:
             frames = decoder.feed(data)
         except ValueError as exc:
             logging.warning("Bridge frame decoding stopped: %s", exc)
+            # The length-prefixed protocol has no sync marker for safe recovery.
             self._running.clear()
             return
         if self.screen_buffer is None:

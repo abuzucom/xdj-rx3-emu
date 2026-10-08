@@ -6,6 +6,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 One deviation applies. A version heading parenthesizes the release date.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.3] (2026-10-08)
+
+### Fixed
+- The viewer keeps image and framebuffer snapshots consistent during redraws.
+- Startup cleanup closes the backend and Tk root on construction failures.
+- Bridge connection attempts stop when the client closes.
+
 ## [0.7.2] (2026-10-08)
 
 ### Fixed
