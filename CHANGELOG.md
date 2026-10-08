@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 One deviation applies. A version heading parenthesizes the release date.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0-alpha.2] (2026-10-08)
+
+### Added
+- The bridge relays initial and changed firmware LED snapshots through type `0x17`.
+
+### Fixed
+- The WSL shim build uses QEMU guest memory maps for firmware LED discovery.
+
 ## [0.8.0-alpha.1] (2026-10-08)
 
 ### Added
