@@ -6,6 +6,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 One deviation applies. A version heading parenthesizes the release date.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.2] (2026-10-08)
+
+### Fixed
+- `windows/rx3_windows.py` uses `PureWindowsPath` for drive-letter validation and WSL path translation so the USB1 source checks behave identically on Windows, macOS, and Linux runners.
+- Removed the duplicated "path" word in the USB source path error message.
+- `tests/test_rx3_windows.py` no longer invokes an external `bash -n` syntax check, which fails on CI images that ship a non-standard `bash.exe`; token-level quoting assertions remain.
+
 ## [0.5.1] (2026-10-07)
 
 ### Fixed
