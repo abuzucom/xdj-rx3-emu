@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 One deviation applies. A version heading parenthesizes the release date.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.3] (2026-10-08)
+
+### Fixed
+- `windows/rx3_windows.py` now performs the USB1 allowed-root confinement check and `rsync` in a single WSL script, passing the resolved canonical path to `rsync` so symlink components cannot be swapped after verification.
+- `_validate_windows_drive_path()` rejects drive-letter roots such as `C:\` to prevent accidental full-drive sync.
+- `sync_usb1_source()` reports a plain missing-source message when no allowed root is configured.
+- `tests/test_rx3_windows.py` no longer gates the shell-escaping test on an external `bash` executable.
+
 ## [0.5.2] (2026-10-08)
 
 ### Fixed

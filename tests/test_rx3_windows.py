@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import shlex
-import shutil
 import subprocess
 import tempfile
 import unittest
@@ -169,18 +168,18 @@ class BootstrapUsbSourceTest(unittest.TestCase):
             source = Path(tmp) / "music"
             source.mkdir()
             windows_source = _windows_path_under_tmp(tmp, source)
-            expected_wsl = _wsl_path_from_windows(windows_source) + "/"
+            expected_wsl = _wsl_path_from_windows(windows_source)
             sync_usb1_source(runner, windows_source)
         commands = [call[0][-1] for call in runner.calls]
-        self.assertTrue(any("readlink -f" in command or "test -d" in command for command in commands))
-        rsync_command = next(command for command in commands if "rsync" in command)
-        self.assertIn("rsync -a --delete", rsync_command)
-        self.assertIn("--max-size=1G", rsync_command)
-        self.assertIn("timeout 600", rsync_command)
-        self.assertIn(expected_wsl, rsync_command)
-        self.assertIn("~/rx3/usb1/Music/", rsync_command)
+        script = next(command for command in commands if "readlink -f" in command)
+        self.assertIn("readlink -f", script)
+        self.assertIn(shlex.quote(expected_wsl), script)
+        self.assertIn("rsync -a --delete", script)
+        self.assertIn("--max-size=1G", script)
+        self.assertIn("timeout 600", script)
+        self.assertIn('"$src/"', script)
+        self.assertIn("~/rx3/usb1/Music/", script)
 
-    @unittest.skipUnless(shutil.which("bash"), "bash not available")
     def test_sync_usb1_source_quotes_shell_metacharacters(self) -> None:
         runner = FakeRunner()
         with tempfile.TemporaryDirectory() as tmp:
@@ -189,28 +188,30 @@ class BootstrapUsbSourceTest(unittest.TestCase):
             windows_source = _windows_path_under_tmp(tmp, source)
             sync_usb1_source(runner, windows_source)
         commands = [call[0][-1] for call in runner.calls]
-        rsync_command = next(command for command in commands if "rsync" in command)
-        tokens = shlex.split(rsync_command)
-        # The malicious words must not appear as separate shell tokens.
+        script = next(command for command in commands if "readlink -f" in command)
+        expected_wsl = _wsl_path_from_windows(windows_source)
+        # The malicious path must be passed through shlex.quote, not left bare.
+        self.assertIn(f"readlink -f {shlex.quote(expected_wsl)}", script)
+        # No unquoted shell metacharacter should appear as a separate token.
+        tokens = shlex.split(script)
         self.assertNotIn("echo", tokens)
         self.assertNotIn("pwned", tokens)
-        # The rsync source must be a single quoted token equal to the WSL path.
-        expected_src = _wsl_path_from_windows(windows_source) + "/"
-        source_tokens = [t for t in tokens if t.startswith("/mnt/")]
-        self.assertEqual(source_tokens, [expected_src])
-        # Token-level validation is the real security invariant: the malicious
-        # words must not appear as separate shell tokens. Avoid invoking an
-        # external bash for syntax checks because CI images ship different bash
-        # executables, some of which do not honor -n consistently.
-        self.assertEqual(source_tokens, [expected_src])
 
     def test_sync_usb1_source_fails_when_folder_missing_in_wsl(self) -> None:
         runner = FakeRunner()
-        runner.scripted.append(("test -d", _completed(["wsl.exe"], 1)))
+        runner.scripted.append(
+            ("test -d", subprocess.CompletedProcess(["wsl.exe"], 1, b"", b"SRC_MISSING")),
+        )
         with self.assertRaises(BootstrapError) as ctx:
             sync_usb1_source(runner, r"C:\nonexistent\folder")
         message = str(ctx.exception)
-        self.assertIn("USB1 source folder does not exist in WSL or is outside allowed root", message)
+        self.assertIn("USB1 source folder does not exist in WSL", message)
+
+    def test_sync_usb1_source_rejects_drive_root(self) -> None:
+        runner = FakeRunner()
+        with self.assertRaises(BootstrapError) as ctx:
+            sync_usb1_source(runner, "C:\\")
+        self.assertIn("cannot be a drive root", str(ctx.exception))
 
     def test_sync_usb1_source_rejects_parent_traversal(self) -> None:
         runner = FakeRunner()
@@ -254,8 +255,8 @@ class BootstrapUsbSourceTest(unittest.TestCase):
             with patch.dict("os.environ", {USB1_ALLOWED_ROOT_ENV: "  "}):
                 sync_usb1_source(runner, _windows_path_under_tmp(tmp, source))
         commands = [call[0][-1] for call in runner.calls]
-        self.assertFalse(any("readlink -f" in command for command in commands))
-        self.assertTrue(any("test -d" in command for command in commands))
+        self.assertTrue(any("readlink -f" in command for command in commands))
+        self.assertFalse(any("[[ " in command for command in commands))
 
     def test_sync_usb1_source_honors_allowed_root_env(self) -> None:
         runner = FakeRunner()

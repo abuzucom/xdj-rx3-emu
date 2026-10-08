@@ -255,6 +255,9 @@ def _validate_windows_drive_path(windows_path: str, label: str) -> None:
     drive = p.drive
     if len(drive) != 2 or drive[1] != ":" or not drive[0].isalpha():
         raise BootstrapError(f"{label} path must use a drive letter (e.g., C:\\): {windows_path!r}")
+    # Reject drive roots such as C:\ to prevent accidental full-drive sync.
+    if len(p.parts) < 2:
+        raise BootstrapError(f"{label} path cannot be a drive root: {windows_path!r}")
 
 
 def _wsl_path_from_windows(windows_path: str) -> str:
@@ -269,62 +272,53 @@ def _wsl_path_from_windows(windows_path: str) -> str:
 def sync_usb1_source(runner: CommandRunner, windows_source: str) -> None:
     """Sync the validated Windows music folder into the WSL virtual USB1 stick.
 
-    Validation, canonicalization, and allowed-root confinement all happen in
-    WSL where rsync runs, so symlink races and Windows/WSL view mismatches
-    cannot bypass the checks.
+    Validation, canonicalization, allowed-root confinement, and rsync all run
+    in a single WSL script using the resolved canonical path, so symlink races
+    and Windows/WSL view mismatches cannot bypass the checks.
     """
     _validate_windows_drive_path(windows_source, "USB1 source")
     wsl_src = _wsl_path_from_windows(windows_source)
     allowed_root = os.environ.get(USB1_ALLOWED_ROOT_ENV, "").strip() or None
+    root_block = ""
     if allowed_root:
         _validate_windows_drive_path(allowed_root, "USB1 allowed root")
         wsl_root = _wsl_path_from_windows(allowed_root)
-        # Canonicalize and confine inside WSL. Case-insensitive prefix match
-        # mirrors Windows filesystem behavior.
-        check = runner.run(
-            wsl_script(
-                "set -e; "
-                f"src=$(readlink -f {shlex.quote(wsl_src)}); "
-                f"root=$(readlink -f {shlex.quote(wsl_root)}); "
-                'test -d "$root" || { printf ROOT_MISSING >&2; exit 1; }; '
-                'test -d "$src" || { printf SRC_MISSING >&2; exit 1; }; '
-                '[[ "${src,,}" == "${root,,}"/* ]] || { printf OUTSIDE_ROOT >&2; exit 1; }'
-            )
+        root_block = (
+            f"root=$(readlink -f {shlex.quote(wsl_root)}); "
+            'test -d "$root" || { printf ROOT_MISSING >&2; exit 1; }; '
+            '[[ "${src,,}" == "${root,,}"/* ]] || { printf OUTSIDE_ROOT >&2; exit 1; }; '
         )
-    else:
-        check = runner.run(wsl_script(f"test -d {shlex.quote(wsl_src)}"))
-    if check.returncode != 0:
-        detail = check.stderr.decode(errors="replace").strip()
+    script = (
+        "set -e; "
+        f"src=$(readlink -f {shlex.quote(wsl_src)}); "
+        f"{root_block}"
+        'test -d "$src" || { printf SRC_MISSING >&2; exit 1; }; '
+        "mkdir -p ~/rx3/usb1/Music && "
+        f"timeout {USB1_SYNC_TIMEOUT_SECONDS} rsync -a --delete --max-size=1G --exclude='.*' "
+        '"$src/" ~/rx3/usb1/Music/'
+    )
+    result = runner.run(wsl_script(script))
+    if result.returncode != 0:
+        detail = result.stderr.decode(errors="replace").strip()
         if "OUTSIDE_ROOT" in detail:
             raise BootstrapError(
                 f"USB1 source folder {windows_source!r} is outside allowed root. Adjust RX3_USB1_ALLOWED_ROOT."
             )
-        if "SRC_MISSING" in detail and allowed_root is not None:
+        if "SRC_MISSING" in detail:
+            if allowed_root is not None:
+                raise BootstrapError(
+                    f"USB1 source folder does not exist in WSL: {windows_source!r}. "
+                    "Create the folder and add music, or unset RX3_USB1_SOURCE / omit --usb1-source to skip this phase."
+                )
             raise BootstrapError(
                 f"USB1 source folder does not exist in WSL: {windows_source!r}. "
-                "Create the folder and add music, or unset RX3_USB1_SOURCE / omit --usb1-source to skip this phase."
-            )
-        if allowed_root is None:
-            raise BootstrapError(
-                f"USB1 source folder does not exist in WSL or is outside allowed root: {windows_source!r}. "
                 "Create it and add music, or unset RX3_USB1_SOURCE / omit --usb1-source to skip this phase."
             )
         if "ROOT_MISSING" in detail:
             raise BootstrapError(
                 f"USB1 allowed root {allowed_root!r} does not exist in WSL. Create it or unset RX3_USB1_ALLOWED_ROOT."
             )
-        raise BootstrapError(
-            f"USB1 source folder check failed for {windows_source!r}. Output: {detail[-ERROR_TAIL_BYTES:]}"
-        )
-    # shlex.quote is safe here because wsl_src is already in POSIX form.
-    quoted_src = shlex.quote(wsl_src + "/")
-    command = (
-        "mkdir -p ~/rx3/usb1/Music && "
-        f"timeout {USB1_SYNC_TIMEOUT_SECONDS} rsync -a --delete --max-size=1G --exclude='.*' "
-        f"{quoted_src} ~/rx3/usb1/Music/"
-    )
-    result = runner.run(wsl_script(command))
-    require_success(result, "USB1 music sync", "Check the source path and that rsync is installed in WSL")
+        raise BootstrapError(f"USB1 music sync failed for {windows_source!r}. Output: {detail[-ERROR_TAIL_BYTES:]}")
 
 
 def launch_emulator(runner: CommandRunner) -> None:
