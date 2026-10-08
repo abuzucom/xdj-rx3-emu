@@ -28,7 +28,8 @@ mkdir -p $H/pi-runtime; cp -f $X/player/pdj/rbp $H/pi-runtime/rbp
 ( cd $H && python3 patch-player.py ) && cp -f $H/rbp-pi $R/root/pdj/rbp-pi && chmod 755 $R/root/pdj/rbp-pi
 echo "== shim"
 python3 $B/patch_fbshim.py $H/fbshim.c $B/fbshim-wsl.c
-$B/armel-gcc -shared -fPIC -O2 -fomit-frame-pointer -fno-builtin -nostdlib -o $R/lib/fbshim.so $B/fbshim-wsl.c $H/control-shim.c $B/wsl-shim.c $B/g2d-shim.c
+python3 $B/patch_controlshim.py $H/control-shim.c $B/control-shim-wsl.c
+$B/armel-gcc -shared -fPIC -O2 -fomit-frame-pointer -fno-builtin -nostdlib -o $R/lib/fbshim.so $B/fbshim-wsl.c $B/control-shim-wsl.c $B/wsl-shim.c $B/g2d-shim.c
 echo "== software DirectFB"
 mkdir -p $R/usr/lib/disabled
 [ -e $R/usr/lib/directfb-1.4-0/gfxdrivers/libdirectfb_gal.so ] && mv $R/usr/lib/directfb-1.4-0/gfxdrivers/libdirectfb_gal.so $R/usr/lib/disabled/ || true
