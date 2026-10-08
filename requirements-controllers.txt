@@ -1,5 +1,7 @@
-# Optional runtime dependencies for the controller-client MIDI backend.
+# Optional runtime dependencies for the MIDI backend and screen viewer.
 # Install with: pip install --require-hashes -r requirements-controllers.txt
+
+-r requirements-viewer.txt
 
 packaging==23.2 \
     --hash=sha256:8c491190033a9af7e1d931d0b5dacc2ef47509b34dd0de67ed209b5203fc88c7 \
