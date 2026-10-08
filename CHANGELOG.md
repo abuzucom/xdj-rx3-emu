@@ -11,6 +11,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### Fixed
 - `windows/rx3_windows.py` uses `PureWindowsPath` for drive-letter validation and WSL path translation so the USB1 source checks behave identically on Windows, macOS, and Linux runners.
 - Removed the duplicated "path" word in the USB source path error message.
+- `tests/test_rx3_windows.py` uses a `_windows_path_under_tmp()` helper to feed realistic `C:\...` paths to the Windows-specific code, so the suite passes on Linux and macOS CI runners where `tempfile` produces POSIX paths.
 - `tests/test_rx3_windows.py` no longer invokes an external `bash -n` syntax check, which fails on CI images that ship a non-standard `bash.exe`; token-level quoting assertions remain.
 
 ## [0.5.1] (2026-10-07)
