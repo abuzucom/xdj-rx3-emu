@@ -1,10 +1,20 @@
-"""Relay stable firmware LED snapshots without importing desktop dependencies."""
+"""Relay firmware snapshots with consumer validation and best-effort race detection.
+
+The snapshot file assumes one trusted firmware writer. Matching reads do not
+guarantee an atomic snapshot or authenticity. Replacement can leave an open
+descriptor on an older snapshot until the next poll. The desktop decoder
+validates every received entry before applying LED state.
+"""
 
 from pathlib import Path
 
+if __package__:
+    from .rxl_layout import LED_COUNT, LED_SNAPSHOT_SIZE
+else:
+    from rxl_layout import LED_COUNT, LED_SNAPSHOT_SIZE
+
 LED_FRAME_TYPE = 0x17
-SNAPSHOT_SIZE = 1048
-LED_COUNT = 64
+SNAPSHOT_SIZE = LED_SNAPSHOT_SIZE
 POLL_SECONDS = 0.03
 
 

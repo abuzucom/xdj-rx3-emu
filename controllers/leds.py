@@ -5,12 +5,15 @@ from __future__ import annotations
 import struct
 from dataclasses import dataclass
 
-LED_HEADER_SIZE = 16
-LED_COUNT = 64
-LED_DECKS = 2
-LED_ENTRY_SIZE = 8
-LED_LEVELS_SIZE = 8
-LED_SNAPSHOT_SIZE = LED_HEADER_SIZE + LED_COUNT * LED_DECKS * LED_ENTRY_SIZE + LED_LEVELS_SIZE
+from wsl.rxl_layout import (
+    LED_HEADER_SIZE,
+    LED_COUNT,
+    LED_DECKS,
+    LED_ENTRY_SIZE,
+    LED_LEVELS_SIZE,
+    LED_SNAPSHOT_SIZE,
+)
+
 DEFAULT_BLINK_PERIOD_MS = 500
 MILLISECONDS_PER_SECOND = 1000
 
