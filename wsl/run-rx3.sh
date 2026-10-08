@@ -5,11 +5,7 @@ set -u
 if [ "${1:-}" != "--owned-session" ]; then
   exec python3 "$HOME/rx3/rx3_session.py"
 fi
-RX3_PORT_VALUE=${RX3_PORT:-4480}
-if [[ ! "$RX3_PORT_VALUE" =~ ^[0-9]{1,5}$ ]] || (( 10#$RX3_PORT_VALUE < 1024 || 10#$RX3_PORT_VALUE > 65535 )); then
-  echo "ERROR: RX3_PORT must be an integer from 1024 to 65535." >&2
-  exit 2
-fi
+RX3_PORT_VALUE="$RX3_PORT"
 B=$HOME/rx3; R=$B/rootfs; LOG=$B/player.log
 [ -x $R/root/pdj/rbp-pi ] || { echo "rootfs not built: run build-rootfs-wsl.sh"; exit 1; }
 rm -f $R/tmp/rx3-master.raw $R/tmp/rx3-cue.raw $R/tmp/rx3-audio-peaks

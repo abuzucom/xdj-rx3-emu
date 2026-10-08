@@ -14,10 +14,12 @@ def main() -> int:
     try:
         result = child.wait()
     except KeyboardInterrupt:
-        child.stdin.close()
+        if child.stdin is not None:
+            child.stdin.close()
         result = child.wait(timeout=10)
     finally:
-        child.stdin.close()
+        if child.stdin is not None:
+            child.stdin.close()
     if result:
         print(f"RX3 stopped with exit code {result}. Check the output above and ~/rx3/player.log.")
         input("Press Enter to close.")

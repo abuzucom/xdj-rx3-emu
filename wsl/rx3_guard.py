@@ -8,6 +8,7 @@ import sys
 PROCESS_NAMES = {"rx3_bridge.py", "rbp-pi"}
 MIN_USER_PORT = 1024
 MAX_USER_PORT = 65535
+DEFAULT_BRIDGE_PORT = 4480
 
 
 def find_processes(proc: Path = Path("/proc")) -> list[int]:
@@ -35,9 +36,16 @@ def validate_port(port: int) -> int:
     return port
 
 
-def check_idle(port: int = 4480, proc: Path = Path("/proc")) -> None:
+def parse_port(value: str) -> int:
+    """Parse an ASCII decimal port and enforce the user port range."""
+    if not value.isascii() or not value.isdecimal():
+        raise ValueError(f"RX3_PORT must be an integer from {MIN_USER_PORT} to {MAX_USER_PORT}.")
+    return validate_port(int(value))
+
+
+def check_idle(port: int = DEFAULT_BRIDGE_PORT, proc: Path = Path("/proc")) -> int:
     """Fail closed on stale processes, unreadable state, or an occupied port."""
-    validate_port(port)
+    port = validate_port(port)
     processes = find_processes(proc)
     if processes:
         identifiers = ", ".join(map(str, processes))
@@ -52,14 +60,12 @@ def check_idle(port: int = 4480, proc: Path = Path("/proc")) -> None:
             raise RuntimeError(
                 f"RX3 bridge port {port} is occupied. Close the existing bridge before retrying."
             ) from error
+    return port
 
 
 if __name__ == "__main__":
     try:
-        port_value = os.environ.get("RX3_PORT", "4480")
-        if not port_value.isdecimal():
-            raise ValueError("RX3_PORT must be an integer from 1024 to 65535.")
-        check_idle(int(port_value))
+        check_idle(parse_port(os.environ.get("RX3_PORT", str(DEFAULT_BRIDGE_PORT))))
     except (OSError, ValueError, RuntimeError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         raise SystemExit(1) from error

@@ -410,11 +410,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     runner = CommandRunner()
     if not options.check_only:
         print("Checking for an existing RX3 session before bootstrap.")
-        guard = (WSL_SOURCE_DIR / "rx3_guard.py").read_bytes()
-        result = runner.run(["wsl.exe", "python3", "-"], input_bytes=guard)
         try:
+            guard = (WSL_SOURCE_DIR / "rx3_guard.py").read_bytes()
+            result = runner.run(["wsl.exe", "python3", "-"], input_bytes=guard)
             require_success(result, "RX3 process preflight", "Close the existing RX3 session before retrying")
-        except BootstrapError as exc:
+        except (BootstrapError, OSError, subprocess.SubprocessError) as exc:
             print(f"ERROR: {exc}", file=sys.stderr)
             return 1
     for index, (title, action) in enumerate(plan, start=1):

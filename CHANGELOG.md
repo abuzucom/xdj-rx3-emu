@@ -6,6 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 One deviation applies. A version heading parenthesizes the release date.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.4] (2026-10-08)
+
+### Fixed
+- Treat clean child exits as successful and prioritize console EOF during shutdown.
+- Report process-group inspection failures with the child exit status.
+- Share the bridge port default between the guard and runtime supervisor.
+- Parse bridge port strings through one shared validator.
+- Show a bootstrap hint when the RX3 runtime directory is missing.
+- Handle optional Windows stdin pipes during cleanup.
+
 ## [0.8.3] (2026-10-08)
 
 ### Fixed
