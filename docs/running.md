@@ -40,6 +40,7 @@ Command-line switches shape the run:
 - `rx3.cmd --no-usb` skips the virtual USB seeding.
 - `rx3.cmd --skip-download` requires a local `firmware/XDJ-RX3_v120.zip` instead of downloading it.
 - `rx3.cmd --usb1-source "PATH"` syncs a Windows music folder into the virtual USB1 stick. Also set via the `RX3_USB1_SOURCE` environment variable.
+- `rx3.cmd --no-usb1-sync` skips the USB1 music sync even when `RX3_USB1_SOURCE` is set.
 
 Every phase is idempotent. Re-run `rx3.cmd` after a failure. The plan skips finished phases.
 

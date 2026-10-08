@@ -12,11 +12,10 @@ from __future__ import annotations
 import argparse
 import functools
 import os
-import shlex
 import shutil
 import subprocess
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
 
@@ -73,6 +72,7 @@ class Options:
     check_only: bool
     no_run: bool
     no_usb: bool
+    no_usb1_sync: bool
     skip_download: bool
     usb1_source: str | None = None
 
@@ -81,9 +81,15 @@ class Options:
 class CommandRunner:
     """Executes local processes; tests inject a fake through the same interface."""
 
-    def run(self, args: Sequence[str], input_bytes: bytes | None = None) -> subprocess.CompletedProcess[bytes]:
+    def run(
+        self,
+        args: Sequence[str],
+        input_bytes: bytes | None = None,
+        env: Mapping[str, str] | None = None,
+    ) -> subprocess.CompletedProcess[bytes]:
         """Run a command to completion and capture its output."""
-        return subprocess.run(list(args), input=input_bytes, capture_output=True, check=False)
+        run_env: Mapping[str, str] | None = {**os.environ, **env} if env else None
+        return subprocess.run(list(args), input=input_bytes, capture_output=True, check=False, env=run_env)
 
     def launch(self, args: Sequence[str]) -> None:
         """Start a detached command in its own console window."""
@@ -242,7 +248,9 @@ def seed_usb_stick(runner: CommandRunner) -> None:
 
 def _resolve_usb1_source(options: Options) -> str | None:
     """Return the configured Windows source path for USB1, or None if unset."""
-    return options.usb1_source if options.usb1_source is not None else os.environ.get(USB1_SOURCE_ENV)
+    value = options.usb1_source if options.usb1_source is not None else os.environ.get(USB1_SOURCE_ENV, "")
+    value = value.strip()
+    return value or None
 
 
 def _validate_windows_drive_path(windows_path: str, label: str) -> None:
@@ -269,35 +277,43 @@ def _wsl_path_from_windows(windows_path: str) -> str:
     return f"/mnt/{drive}/" + "/".join(p.parts[1:])
 
 
+# Minimum free bytes required on the destination before syncing USB1 music.
+USB1_MIN_FREE_BYTES = 1 * 1024 * 1024 * 1024
+
+
 def sync_usb1_source(runner: CommandRunner, windows_source: str) -> None:
     """Sync the validated Windows music folder into the WSL virtual USB1 stick.
 
-    Validation, canonicalization, allowed-root confinement, and rsync all run
-    in a single WSL script using the resolved canonical path, so symlink races
-    and Windows/WSL view mismatches cannot bypass the checks.
+    Validation, canonicalization, allowed-root confinement, free-space checks,
+    and rsync all run in a single WSL script using the resolved canonical path,
+    so symlink races and Windows/WSL view mismatches cannot bypass the checks.
+    The source and allowed-root paths are passed as environment variables to
+    remove the quoting surface entirely.
     """
     _validate_windows_drive_path(windows_source, "USB1 source")
     wsl_src = _wsl_path_from_windows(windows_source)
     allowed_root = os.environ.get(USB1_ALLOWED_ROOT_ENV, "").strip() or None
-    root_block = ""
+    wsl_root = ""
     if allowed_root:
         _validate_windows_drive_path(allowed_root, "USB1 allowed root")
         wsl_root = _wsl_path_from_windows(allowed_root)
-        root_block = (
-            f"root=$(readlink -f {shlex.quote(wsl_root)}); "
-            'test -d "$root" || { printf ROOT_MISSING >&2; exit 1; }; '
-            '[[ "${src,,}" == "${root,,}"/* ]] || { printf OUTSIDE_ROOT >&2; exit 1; }; '
-        )
+    env = {"RX3_SRC": wsl_src, "RX3_ROOT": wsl_root}
     script = (
         "set -e; "
-        f"src=$(readlink -f {shlex.quote(wsl_src)}); "
-        f"{root_block}"
+        'src=$(readlink -f "$RX3_SRC"); '
         'test -d "$src" || { printf SRC_MISSING >&2; exit 1; }; '
-        "mkdir -p ~/rx3/usb1/Music && "
+        'if [ -n "$RX3_ROOT" ]; then '
+        '  root=$(readlink -f "$RX3_ROOT"); '
+        '  test -d "$root" || { printf ROOT_MISSING >&2; exit 1; }; '
+        '  case "$src" in "$root"/*) ;; *) printf OUTSIDE_ROOT >&2; exit 1;; esac; '
+        "fi; "
+        "mkdir -p ~/rx3/usb1/Music; "
+        r'available=$(df -P -B1 ~/rx3/usb1/Music | awk "NR==2 {print \$4}"); '
+        f'[ "$available" -ge {USB1_MIN_FREE_BYTES} ] || {{ printf NO_SPACE >&2; exit 1; }}; '
         f"timeout {USB1_SYNC_TIMEOUT_SECONDS} rsync -a --delete --max-size=1G --exclude='.*' "
         '"$src/" ~/rx3/usb1/Music/'
     )
-    result = runner.run(wsl_script(script))
+    result = runner.run(wsl_script(script), env=env)
     if result.returncode != 0:
         detail = result.stderr.decode(errors="replace").strip()
         if "OUTSIDE_ROOT" in detail:
@@ -305,18 +321,18 @@ def sync_usb1_source(runner: CommandRunner, windows_source: str) -> None:
                 f"USB1 source folder {windows_source!r} is outside allowed root. Adjust RX3_USB1_ALLOWED_ROOT."
             )
         if "SRC_MISSING" in detail:
-            if allowed_root is not None:
-                raise BootstrapError(
-                    f"USB1 source folder does not exist in WSL: {windows_source!r}. "
-                    "Create the folder and add music, or unset RX3_USB1_SOURCE / omit --usb1-source to skip this phase."
-                )
             raise BootstrapError(
                 f"USB1 source folder does not exist in WSL: {windows_source!r}. "
-                "Create it and add music, or unset RX3_USB1_SOURCE / omit --usb1-source to skip this phase."
+                "Create the folder and add music, or unset RX3_USB1_SOURCE / omit --usb1-source to skip this phase."
             )
         if "ROOT_MISSING" in detail:
             raise BootstrapError(
                 f"USB1 allowed root {allowed_root!r} does not exist in WSL. Create it or unset RX3_USB1_ALLOWED_ROOT."
+            )
+        if "NO_SPACE" in detail:
+            raise BootstrapError(
+                "USB1 destination does not have enough free space. "
+                "Free at least 1 GiB inside WSL or adjust the source folder."
             )
         raise BootstrapError(f"USB1 music sync failed for {windows_source!r}. Output: {detail[-ERROR_TAIL_BYTES:]}")
 
@@ -342,9 +358,10 @@ def build_phase_plan(options: Options) -> list[tuple[str, PhaseAction]]:
     ]
     if not options.no_usb:
         plan.append(("Seed virtual USB stick", seed_usb_stick))
-        usb_source = _resolve_usb1_source(options)
-        if usb_source:
-            plan.append(("Sync USB1 music", functools.partial(sync_usb1_source, windows_source=usb_source)))
+        if not options.no_usb1_sync:
+            usb_source = _resolve_usb1_source(options)
+            if usb_source:
+                plan.append(("Sync USB1 music", functools.partial(sync_usb1_source, windows_source=usb_source)))
     if not options.no_run:
         plan.append(("Launch emulator", launch_emulator))
     return plan
@@ -356,6 +373,11 @@ def parse_args(argv: Sequence[str] | None = None) -> Options:
     parser.add_argument("--check-only", action="store_true", help="run environment checks and stop")
     parser.add_argument("--no-run", action="store_true", help="bootstrap without launching the emulator")
     parser.add_argument("--no-usb", action="store_true", help="skip seeding the virtual USB stick")
+    parser.add_argument(
+        "--no-usb1-sync",
+        action="store_true",
+        help="skip syncing the configured USB1 music folder",
+    )
     parser.add_argument(
         "--skip-download",
         action="store_true",
@@ -372,6 +394,7 @@ def parse_args(argv: Sequence[str] | None = None) -> Options:
         check_only=args.check_only,
         no_run=args.no_run,
         no_usb=args.no_usb,
+        no_usb1_sync=args.no_usb1_sync,
         skip_download=args.skip_download,
         usb1_source=args.usb1_source,
     )

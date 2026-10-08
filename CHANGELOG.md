@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 One deviation applies. A version heading parenthesizes the release date.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.4] (2026-10-08)
+
+### Fixed
+- `windows/rx3_windows.py` passes the USB1 source and allowed-root paths to WSL as environment variables (`RX3_SRC`, `RX3_ROOT`) instead of embedding quoted strings, removing the shell-quoting surface from operator input.
+- Replaced the string-prefix allowed-root check with a true path-prefix `case` check so sibling directories such as `C:\allowed-root-evil` no longer bypass `C:\allowed-root`.
+- Added a destination free-space check before `rsync` and a `--no-usb1-sync` switch to skip music sync while still seeding the virtual USB stick.
+- `_resolve_usb1_source()` now treats an empty `RX3_USB1_SOURCE` value as unset, matching `.env.example` placeholder behavior.
+
 ## [0.5.3] (2026-10-08)
 
 ### Fixed
