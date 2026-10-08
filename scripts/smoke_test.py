@@ -24,12 +24,18 @@ import zipfile
 from collections.abc import Iterator
 from pathlib import Path
 
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from controllers.protocol import MAX_FRAME_LENGTH as _MAX_FRAME_LENGTH
+from controllers.protocol import read_frame, write_frame
+
 DEFAULT_PORT = 4480
+MAX_FRAME_LENGTH = _MAX_FRAME_LENGTH
 SCREEN_WIDTH = 1280
 SCREEN_HEIGHT = 800
 UPD_FILENAME = "XDJRX3.UPD"
 MIN_UPD_BYTES = 50_000_000
-MAX_FRAME_LENGTH = 1_048_576
 MAX_DOWNLOAD_BYTES = 1_073_741_824
 MAX_EXTRACT_BYTES = 2_147_483_648
 READ_CHUNK_SIZE = 64 * 1024
@@ -53,57 +59,6 @@ def load_expected_hash(hash_path: Path = DEFAULT_HASH_FILE) -> str:
         if len(token) == 64:
             return token.lower()
     return EXPECTED_FIRMWARE_SHA256
-
-
-def write_frame(sock: socket.socket, msg_type: int, payload: bytes) -> None:
-    """Send wire frame [type u8][len u32 LE][payload]."""
-    hdr = struct.pack("<BI", msg_type, len(payload))
-    sock.sendall(hdr + payload)
-
-
-def _apply_read_deadline(sock: socket.socket, deadline: float | None) -> None:
-    """Constrain the next socket read to the remaining deadline budget."""
-    if deadline is None:
-        return
-    remaining = deadline - time.monotonic()
-    if remaining <= 0:
-        raise TimeoutError("read_frame deadline exceeded")
-    sock.settimeout(remaining)
-
-
-def read_frame(
-    sock: socket.socket,
-    max_length: int = MAX_FRAME_LENGTH,
-    timeout: float | None = 5.0,
-) -> tuple[int, bytes] | None:
-    """Read a wire frame [type u8][len u32 LE][payload].
-
-    Returns (msg_type, payload) tuple, or None if socket closed or length invalid.
-    """
-    deadline = time.monotonic() + timeout if timeout is not None else None
-
-    hdr = b""
-    while len(hdr) < 5:
-        _apply_read_deadline(sock, deadline)
-        chunk = sock.recv(5 - len(hdr))
-        if not chunk:
-            return None
-        hdr += chunk
-
-    msg_type, length = struct.unpack("<BI", hdr)
-    if length > max_length:
-        logging.warning("Frame length %d exceeds maximum allowed %d", length, max_length)
-        return None
-
-    payload = bytearray()
-    while len(payload) < length:
-        _apply_read_deadline(sock, deadline)
-        chunk = sock.recv(length - len(payload))
-        if not chunk:
-            return None
-        payload.extend(chunk)
-
-    return msg_type, bytes(payload)
 
 
 def compute_file_sha256(path: Path) -> str:
