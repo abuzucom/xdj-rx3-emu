@@ -46,7 +46,12 @@ def _completed(args: list[str], code: int = 0, stdout: bytes = b"") -> subproces
 
 
 class FakeRunner:
-    """Record commands, emulate WSL path state, and replay scripted results."""
+    """Record commands, emulate WSL path state, and replay scripted results.
+
+    Each test should create a fresh instance. When ``consume_scripted`` is
+    True, responses are consumed in order and the runner must not be reused
+    across tests.
+    """
 
     def __init__(self) -> None:
         self.calls: list[tuple[list[str], bytes | None]] = []

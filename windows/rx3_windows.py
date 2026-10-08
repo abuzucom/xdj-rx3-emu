@@ -299,7 +299,12 @@ def sync_usb1_source(runner: CommandRunner, windows_source: str) -> None:
             raise BootstrapError(
                 f"USB1 source folder {windows_source!r} is outside allowed root. Adjust RX3_USB1_ALLOWED_ROOT."
             )
-        if "SRC_MISSING" in detail or allowed_root is None:
+        if "SRC_MISSING" in detail and allowed_root is not None:
+            raise BootstrapError(
+                f"USB1 source folder does not exist in WSL: {windows_source!r}. "
+                "Create the folder and add music, or unset RX3_USB1_SOURCE / omit --usb1-source to skip this phase."
+            )
+        if allowed_root is None:
             raise BootstrapError(
                 f"USB1 source folder does not exist in WSL or is outside allowed root: {windows_source!r}. "
                 "Create it and add music, or unset RX3_USB1_SOURCE / omit --usb1-source to skip this phase."
