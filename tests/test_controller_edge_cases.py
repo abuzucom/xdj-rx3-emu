@@ -33,7 +33,7 @@ class ControllerEdgeCaseTest(unittest.TestCase):
             data = {"encoders": {"2": {"key": "BROWSE", "analog_scale": ["bad"]}}}
             path.write_text(json.dumps(data), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "does not support analog_scale"):
-                load_profile(path)
+                load_profile(path, profile_root=temp_dir)
 
     def test_missing_midi_port_has_recovery_message(self) -> None:
         midi = Mock()

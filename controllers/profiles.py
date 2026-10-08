@@ -19,6 +19,7 @@ from controllers.events import (
     JogEvent,
 )
 
+PROFILE_DIRECTORY = Path(__file__).resolve().parent / "profiles"
 MIDI_CC_MAX = 127
 ENCODER_CENTER_VALUE = 64
 PITCH_BEND_CENTER = 0x2000
@@ -131,6 +132,30 @@ def _parse_analog_scale(value: Any, control: str) -> tuple[float, float]:
     return scale
 
 
+def _resolve_profile_file(path: str | Path, profile_root: str | Path) -> Path:
+    """Resolve a profile file and require it to remain under its profile root."""
+    root = Path(profile_root).resolve()
+    requested = Path(path)
+    if requested.is_absolute():
+        candidate = requested
+    else:
+        working_candidate = Path.cwd() / requested
+        candidate = (
+            working_candidate if working_candidate.exists() or working_candidate.is_symlink() else root / requested
+        )
+    try:
+        resolved = candidate.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise ValueError(f"Cannot resolve controller profile {path!r}") from exc
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise ValueError(f"Controller profile must be within {root!s}: {path!r}") from exc
+    if not resolved.is_file():
+        raise ValueError(f"Controller profile is not a file: {path!r}")
+    return resolved
+
+
 DEFAULT_PROFILE = Profile(
     name="default",
     buttons={
@@ -148,11 +173,15 @@ DEFAULT_PROFILE = Profile(
 )
 
 
-def load_profile(path: str | Path | None = None) -> Profile:
-    """Load a profile from JSON, or return the default profile if path is None."""
+def load_profile(
+    path: str | Path | None = None,
+    profile_root: str | Path = PROFILE_DIRECTORY,
+) -> Profile:
+    """Load a JSON profile from profile_root, or return the default profile."""
     if path is None:
         return DEFAULT_PROFILE
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    profile_path = _resolve_profile_file(path, profile_root)
+    data = json.loads(profile_path.read_text(encoding="utf-8"))
     buttons = {}
     for note, raw in data.get("buttons", {}).items():
         mapping = ButtonMapping(

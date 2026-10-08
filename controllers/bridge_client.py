@@ -85,14 +85,14 @@ class BridgeClient:
         """Shutdown and close a socket to wake the reader thread."""
         try:
             sock.shutdown(socket.SHUT_RDWR)
-        except OSError:
+        except OSError as exc:
             # The peer may have closed the socket before shutdown.
-            pass
+            logging.debug("Bridge socket shutdown failed during close: %s", exc)
         try:
             sock.close()
-        except OSError:
+        except OSError as exc:
             # The peer may have closed the socket before close.
-            pass
+            logging.debug("Bridge socket close failed during cleanup: %s", exc)
 
     def _connect(self) -> socket.socket:
         """Connect to the bridge with a retry loop."""

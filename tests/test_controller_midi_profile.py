@@ -48,7 +48,7 @@ class ProfileTest(unittest.TestCase):
         self.assertEqual(event.delta, 5)
 
     def test_load_default_json_profile(self) -> None:
-        profile = load_profile(Path("controllers/profiles/default.json"))
+        profile = load_profile("default.json")
         self.assertEqual(profile.name, "default")
         event = profile.map_note(37, midi_channel=0, velocity=127)
         self.assertIsNotNone(event)
@@ -60,7 +60,7 @@ class ProfileTest(unittest.TestCase):
             path = Path(tmp) / "bad.json"
             path.write_text('{"buttons": {"1": {"key": "BOGUS"}}}')
             with self.assertRaises(ValueError):
-                load_profile(path)
+                load_profile(path, profile_root=tmp)
 
 
 if __name__ == "__main__":

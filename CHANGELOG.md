@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 One deviation applies. A version heading parenthesizes the release date.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.4] (2026-10-07)
+
+### Fixed
+- `load_profile()` resolves profile paths and rejects files outside its configured profile root.
+- `--profile` uses files from `controllers/profiles/`. Documentation now states this constraint.
+- Encoder profiles reject unsupported `analog_scale` fields.
+- The bridge client logs socket shutdown and close errors during cleanup.
+
 ## [0.6.3] (2026-10-08)
 
 ### Fixed

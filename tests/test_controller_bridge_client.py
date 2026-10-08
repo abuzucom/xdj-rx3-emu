@@ -17,6 +17,7 @@ from scripts.smoke_test import read_frame
 class _OneShotBackend(ControllerBackend):
     def __init__(self) -> None:
         self._sent = False
+        self.closed = False
 
     def poll(self) -> ButtonEvent | None:
         if not self._sent:
@@ -25,7 +26,7 @@ class _OneShotBackend(ControllerBackend):
         return None
 
     def close(self) -> None:
-        pass
+        self.closed = True
 
 
 class BridgeClientTest(unittest.TestCase):
@@ -70,6 +71,7 @@ class BridgeClientTest(unittest.TestCase):
         client_thread.join(timeout=2.0)
 
         self.assertEqual(len(received), 1)
+        self.assertTrue(backend.closed)
         typ, payload = received[0]
         self.assertEqual(typ, 0x30)
         key, op, channel, value, analog = struct.unpack("<iiiif", payload)

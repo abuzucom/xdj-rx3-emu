@@ -12,15 +12,26 @@ from controllers.events import ControllerEvent
 
 
 class _IdleBackend(ControllerBackend):
+    def __init__(self) -> None:
+        self.closed = False
+
     def poll(self) -> ControllerEvent | None:
         return None
 
     def close(self) -> None:
-        pass
+        self.closed = True
 
 
 class BridgeRetryTest(unittest.TestCase):
     """Ensure transient socket errors do not end the retry window early."""
+
+    def test_close_closes_backend(self) -> None:
+        backend = _IdleBackend()
+        client = BridgeClient(backend, "127.0.0.1", 4480)
+
+        client.close()
+
+        self.assertTrue(backend.closed)
 
     def test_retries_socket_error_before_connecting(self) -> None:
         client = BridgeClient(_IdleBackend(), "127.0.0.1", 4480)

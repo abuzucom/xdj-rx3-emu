@@ -158,7 +158,9 @@ It installs them with pip hash verification if either package is missing.
 It starts the MIDI client. Run the explicit pip command above before using
 `controller.cmd` to control when installation occurs.
 
-Use `--bridge-host` and `--bridge-port` to target a non-default bridge. Use `--profile` to load a custom JSON mapping from MIDI messages to firmware keys. See `controllers/profiles/default.json` for the schema.
+Use `--bridge-host` and `--bridge-port` to target a non-default bridge.
+Place custom JSON profiles in `controllers/profiles/` before using `--profile`.
+See `controllers/profiles/default.json` for the schema.
 
 ## Connecting a client
 

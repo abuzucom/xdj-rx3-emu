@@ -36,7 +36,7 @@ class ProfileValidationTest(unittest.TestCase):
                     }
                     path.write_text(json.dumps(data), encoding="utf-8")
                     with self.assertRaisesRegex(ValueError, "analog_scale"):
-                        load_profile(path)
+                        load_profile(path, profile_root=temp_dir)
 
     def test_normalizes_integer_analog_scale_values(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -52,8 +52,19 @@ class ProfileValidationTest(unittest.TestCase):
                 }),
                 encoding="utf-8",
             )
-            profile = load_profile(path)
+            profile = load_profile(path, profile_root=temp_dir)
         self.assertEqual(profile.faders[1].analog_scale, (0.0, 127.0))
+
+    def test_rejects_profile_outside_configured_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "profiles"
+            root.mkdir()
+            outside = Path(temp_dir) / "outside.json"
+            outside.write_text('{"name": "outside"}', encoding="utf-8")
+            for requested_path in (outside, "../outside.json"):
+                with self.subTest(requested_path=requested_path):
+                    with self.assertRaisesRegex(ValueError, "must be within"):
+                        load_profile(requested_path, profile_root=root)
 
 
 if __name__ == "__main__":

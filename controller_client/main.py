@@ -16,7 +16,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--backend", choices=["midi"], default="midi", help="controller backend to use")
     parser.add_argument("--bridge-host", default="127.0.0.1", help="emulator bridge host")
     parser.add_argument("--bridge-port", type=int, default=4480, help="emulator bridge port")
-    parser.add_argument("--profile", default=None, help="path to a JSON controller profile")
+    parser.add_argument(
+        "--profile",
+        default=None,
+        help="JSON profile path inside controllers/profiles",
+    )
     parser.add_argument("--midi-port", default=None, help="MIDI input port name (default: first available)")
     args = parser.parse_args(argv)
 
