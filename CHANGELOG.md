@@ -12,6 +12,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - The viewer keeps image and framebuffer snapshots consistent during redraws.
 - Startup cleanup closes the backend and Tk root on construction failures.
 - Bridge connection attempts stop when the client closes.
+- Tests cover atomic framebuffer snapshots and cancellable socket setup.
 
 ## [0.7.2] (2026-10-08)
 
