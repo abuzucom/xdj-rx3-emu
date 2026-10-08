@@ -56,6 +56,19 @@ class ScreenFrameBuffer:
             self._reset_pending = False
             return result
 
+    def take_updates_with_snapshot(
+        self,
+    ) -> tuple[int, int, bool, tuple[ScreenTile, ...], bytes]:
+        """Return pending updates and their matching framebuffer snapshot."""
+        with self._lock:
+            updates = tuple(self._pending_tiles.values())
+            reset = self._reset_pending
+            pixels = bytes(self._pixels) if reset or updates else b""
+            result = self._width, self._height, reset, updates, pixels
+            self._pending_tiles.clear()
+            self._reset_pending = False
+            return result
+
     def snapshot(self) -> tuple[int, int, bytes]:
         """Return a consistent copy of the assembled RGBA framebuffer."""
         with self._lock:
@@ -100,6 +113,7 @@ class ScreenFrameBuffer:
             raise ValueError("Screen tile exceeds the current screen dimensions")
 
     def _copy_tile_pixels(self, tile: ScreenTile) -> None:
+        """Copy a tile while the caller holds `_lock`."""
         row_size = tile.width * RGBA_BYTES_PER_PIXEL
         for row in range(tile.height):
             source_start = row * row_size
