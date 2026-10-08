@@ -8,7 +8,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from unittest.mock import patch
 
 from windows.rx3_windows import (
@@ -43,6 +43,16 @@ from windows.rx3_windows import (
 
 def _completed(args: list[str], code: int = 0, stdout: bytes = b"") -> subprocess.CompletedProcess[bytes]:
     return subprocess.CompletedProcess(args, code, stdout, b"")
+
+
+def _windows_path_under_tmp(tmp: Path, target: Path) -> str:
+    r"""Return a Windows-style path string for a directory under tmp.
+
+    Tests run on Linux CI runners where tempfile returns POSIX paths. The
+    production code expects Windows drive-letter paths, so fabricate a
+    matching C:\temp\... string without touching the filesystem.
+    """
+    return str(PureWindowsPath("C:/temp") / target.relative_to(tmp))
 
 
 class FakeRunner:
@@ -158,8 +168,9 @@ class BootstrapUsbSourceTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "music"
             source.mkdir()
-            expected_wsl = _wsl_path_from_windows(str(source)) + "/"
-            sync_usb1_source(runner, str(source))
+            windows_source = _windows_path_under_tmp(tmp, source)
+            expected_wsl = _wsl_path_from_windows(windows_source) + "/"
+            sync_usb1_source(runner, windows_source)
         commands = [call[0][-1] for call in runner.calls]
         self.assertTrue(any("readlink -f" in command or "test -d" in command for command in commands))
         rsync_command = next(command for command in commands if "rsync" in command)
@@ -175,7 +186,8 @@ class BootstrapUsbSourceTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "music'; echo pwned"
             source.mkdir()
-            sync_usb1_source(runner, str(source))
+            windows_source = _windows_path_under_tmp(tmp, source)
+            sync_usb1_source(runner, windows_source)
         commands = [call[0][-1] for call in runner.calls]
         rsync_command = next(command for command in commands if "rsync" in command)
         tokens = shlex.split(rsync_command)
@@ -183,8 +195,9 @@ class BootstrapUsbSourceTest(unittest.TestCase):
         self.assertNotIn("echo", tokens)
         self.assertNotIn("pwned", tokens)
         # The rsync source must be a single quoted token equal to the WSL path.
-        expected_src = _wsl_path_from_windows(str(source)) + "/"
+        expected_src = _wsl_path_from_windows(windows_source) + "/"
         source_tokens = [t for t in tokens if t.startswith("/mnt/")]
+        self.assertEqual(source_tokens, [expected_src])
         # Token-level validation is the real security invariant: the malicious
         # words must not appear as separate shell tokens. Avoid invoking an
         # external bash for syntax checks because CI images ship different bash
@@ -210,8 +223,8 @@ class BootstrapUsbSourceTest(unittest.TestCase):
             music = Path(tmp) / "Music"
             music.mkdir()
             (music / "foo").mkdir()
-            allowed_root = str(music)
-            traversal = str(Path(tmp) / "Music" / "foo" / ".." / "..")
+            allowed_root = _windows_path_under_tmp(tmp, music)
+            traversal = _windows_path_under_tmp(tmp, Path(tmp) / "Music" / "foo" / ".." / "..")
             runner = FakeRunner()
             with patch.dict("os.environ", {USB1_ALLOWED_ROOT_ENV: allowed_root}):
                 with self.assertRaises(BootstrapError) as ctx:
@@ -228,8 +241,8 @@ class BootstrapUsbSourceTest(unittest.TestCase):
             sub = allowed / "sub"
             sub.mkdir()
             runner = FakeRunner()
-            with patch.dict("os.environ", {USB1_ALLOWED_ROOT_ENV: str(allowed)}):
-                sync_usb1_source(runner, str(sub).lower())
+            with patch.dict("os.environ", {USB1_ALLOWED_ROOT_ENV: _windows_path_under_tmp(tmp, allowed)}):
+                sync_usb1_source(runner, _windows_path_under_tmp(tmp, sub).lower())
         commands = [call[0][-1] for call in runner.calls]
         self.assertTrue(any("readlink -f" in command for command in commands))
 
@@ -239,7 +252,7 @@ class BootstrapUsbSourceTest(unittest.TestCase):
             source = Path(tmp) / "music"
             source.mkdir()
             with patch.dict("os.environ", {USB1_ALLOWED_ROOT_ENV: "  "}):
-                sync_usb1_source(runner, str(source))
+                sync_usb1_source(runner, _windows_path_under_tmp(tmp, source))
         commands = [call[0][-1] for call in runner.calls]
         self.assertFalse(any("readlink -f" in command for command in commands))
         self.assertTrue(any("test -d" in command for command in commands))
@@ -255,8 +268,11 @@ class BootstrapUsbSourceTest(unittest.TestCase):
             allowed_sub.mkdir()
             outside = Path(tmp) / "outside"
             outside.mkdir()
-            with patch.dict("os.environ", {USB1_ALLOWED_ROOT_ENV: str(allowed)}):
-                sync_usb1_source(runner, str(allowed_sub))
+            with patch.dict(
+                "os.environ",
+                {USB1_ALLOWED_ROOT_ENV: _windows_path_under_tmp(tmp, allowed)},
+            ):
+                sync_usb1_source(runner, _windows_path_under_tmp(tmp, allowed_sub))
             runner.scripted.append(
                 (
                     "readlink -f",
@@ -264,8 +280,11 @@ class BootstrapUsbSourceTest(unittest.TestCase):
                 ),
             )
             with self.assertRaises(BootstrapError) as ctx:
-                with patch.dict("os.environ", {USB1_ALLOWED_ROOT_ENV: str(allowed)}):
-                    sync_usb1_source(runner, str(outside))
+                with patch.dict(
+                    "os.environ",
+                    {USB1_ALLOWED_ROOT_ENV: _windows_path_under_tmp(tmp, allowed)},
+                ):
+                    sync_usb1_source(runner, _windows_path_under_tmp(tmp, outside))
         self.assertIn("outside allowed root", str(ctx.exception))
 
     def test_plan_appends_sync_stage_when_source_configured(self) -> None:
