@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import os
 import shlex
 import shutil
 import subprocess
@@ -54,6 +53,8 @@ class FakeRunner:
         self.launches: list[list[str]] = []
         self.scripted: list[tuple[str, subprocess.CompletedProcess[bytes]]] = []
         self.path_exists: set[str] = set()
+        self.consume_scripted: bool = False
+        self._scripted_index: int = 0
 
     def run(self, args: list[str], input_bytes: bytes | None = None) -> subprocess.CompletedProcess[bytes]:
         self.calls.append((list(args), input_bytes))
@@ -62,9 +63,16 @@ class FakeRunner:
             return self._path_probe(args, command)
         self._emulate_side_effects(command)
         joined = " ".join(str(part) for part in args)
-        for needle, result in self.scripted:
-            if needle in joined:
-                return result
+        if self.consume_scripted:
+            for index in range(self._scripted_index, len(self.scripted)):
+                needle, result = self.scripted[index]
+                if needle in joined:
+                    self._scripted_index = index + 1
+                    return result
+        else:
+            for needle, result in self.scripted:
+                if needle in joined:
+                    return result
         return _completed(list(args))
 
     def launch(self, args: list[str]) -> None:
@@ -92,7 +100,9 @@ class BootstrapUsbSourceTest(unittest.TestCase):
 
     def test_resolve_usb1_source_prefers_argument_over_env(self) -> None:
         with patch.dict("os.environ", {USB1_SOURCE_ENV: r"C:\env\music"}):
-            options = Options(check_only=False, no_run=False, no_usb=False, skip_download=False, usb1_source=r"C:\arg\music")
+            options = Options(
+                check_only=False, no_run=False, no_usb=False, skip_download=False, usb1_source=r"C:\arg\music"
+            )
             self.assertEqual(_resolve_usb1_source(options), r"C:\arg\music")
 
     def test_resolve_usb1_source_falls_back_to_env(self) -> None:
@@ -230,6 +240,8 @@ class BootstrapUsbSourceTest(unittest.TestCase):
 
     def test_sync_usb1_source_honors_allowed_root_env(self) -> None:
         runner = FakeRunner()
+        runner.consume_scripted = True
+        runner.scripted.append(("readlink -f", _completed(["wsl.exe"], 0)))
         with tempfile.TemporaryDirectory() as tmp:
             allowed = Path(tmp) / "allowed"
             allowed.mkdir()
@@ -239,7 +251,12 @@ class BootstrapUsbSourceTest(unittest.TestCase):
             outside.mkdir()
             with patch.dict("os.environ", {USB1_ALLOWED_ROOT_ENV: str(allowed)}):
                 sync_usb1_source(runner, str(allowed_sub))
-            runner.scripted.append(("readlink -f", _completed(["wsl.exe"], 1)))
+            runner.scripted.append(
+                (
+                    "readlink -f",
+                    subprocess.CompletedProcess(["wsl.exe"], 1, b"", b"OUTSIDE_ROOT"),
+                ),
+            )
             with self.assertRaises(BootstrapError) as ctx:
                 with patch.dict("os.environ", {USB1_ALLOWED_ROOT_ENV: str(allowed)}):
                     sync_usb1_source(runner, str(outside))
