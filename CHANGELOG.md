@@ -6,6 +6,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 One deviation applies. A version heading parenthesizes the release date.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] (2026-10-08)
+
+### Fixed
+- `controller.cmd` installs MIDI dependencies only after checking both `mido` and `rtmidi`.
+  Pip uses `--require-hashes` for the pinned dependency set.
+- `docs/running.md` warns that the one-click launcher can contact PyPI and install packages.
+  The manual install command also requires hashes.
+- `README.md` points to the controller launcher and setup instructions.
+- Moved bridge frame helpers to `controllers/protocol.py`.
+  `scripts/smoke_test.py` re-exports the shared helpers for backward compatibility.
+- `load_profile()` validates that each fader `analog_scale` contains exactly two
+  finite numeric values.
+- `BridgeClient` uses `threading.Event` for shutdown state and joins its reader thread during close.
+
 ## [0.6.0] (2026-10-08)
 
 ### Added
@@ -13,7 +27,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   - `controllers/events.py` defines semantic events (`ButtonEvent`, `JogEvent`, `FaderEvent`, `EncoderEvent`) and serializes them to bridge `0x30` key-command frames.
   - `controllers/profiles.py` loads JSON device profiles mapping MIDI notes/CC/pitch-bend to firmware keys; a default profile ships at `controllers/profiles/default.json`.
   - `controllers/backends/midi.py` implements a MIDI backend via optional `mido`/`python-rtmidi` dependencies.
-  - `controllers/bridge_client.py` connects a backend to `127.0.0.1:4480` and forwards events, reusing `scripts/smoke_test.py` framing.
+  - `controllers/bridge_client.py` connects a backend to `127.0.0.1:4480` and
+    forwards events through shared bridge framing helpers.
 - New `controller_client/main.py` CLI with `--backend`, `--bridge-host`, `--bridge-port`, `--profile`, and `--midi-port` options.
 - `requirements-controllers.txt` pins optional runtime dependencies with SHA-256 hashes.
 - `docs/running.md` documents MIDI controller setup.

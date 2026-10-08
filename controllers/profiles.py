@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -114,6 +115,21 @@ def _normalize_key(value: Any) -> ControlKey:
     raise TypeError(f"Key must be int or str, got {type(value)}")
 
 
+def _parse_analog_scale(value: Any, control: str) -> tuple[float, float]:
+    """Validate and normalize the low and high analog scale values."""
+    if not isinstance(value, list) or len(value) != 2:
+        raise ValueError(f"{control} analog_scale must contain exactly two numbers")
+    if any(isinstance(item, bool) or not isinstance(item, (int, float)) for item in value):
+        raise ValueError(f"{control} analog_scale must contain exactly two numbers")
+    try:
+        scale = float(value[0]), float(value[1])
+    except OverflowError as exc:
+        raise ValueError(f"{control} analog_scale values must be finite") from exc
+    if not all(math.isfinite(item) for item in scale):
+        raise ValueError(f"{control} analog_scale values must be finite")
+    return scale
+
+
 DEFAULT_PROFILE = Profile(
     name="default",
     buttons={
@@ -145,10 +161,11 @@ def load_profile(path: str | Path | None = None) -> Profile:
         buttons[int(note)] = mapping
     faders = {}
     for cc, raw in data.get("faders", {}).items():
+        analog_scale = _parse_analog_scale(raw.get("analog_scale", [-1.0, 1.0]), f"Fader CC {cc}")
         faders[int(cc)] = ContinuousMapping(
             key=_normalize_key(raw.get("key")),
             channel=raw.get("channel", 0),
-            analog_scale=tuple(raw.get("analog_scale", [-1.0, 1.0])),
+            analog_scale=analog_scale,
         )
     encoders = {}
     for cc, raw in data.get("encoders", {}).items():

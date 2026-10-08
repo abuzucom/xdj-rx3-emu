@@ -41,6 +41,9 @@ recovery tooling, verifies the firmware archive, builds the chroot, seeds a virt
 the player with the bridge. See `docs/running.md` for requirements, the manual setup path, the environment
 variable table, and troubleshooting.
 
+The optional controller client forwards MIDI input over the bridge. Double-click `controller.cmd` to start it.
+The launcher may install hashed MIDI dependencies on first run. See `docs/running.md` for setup details.
+
 The manual equivalent inside WSL:
 
 1. `wsl/rx3_fetch.sh` fetches proot, an armv7 toolchain, Pioneer's public XDJ-RX3 update and GPL source
