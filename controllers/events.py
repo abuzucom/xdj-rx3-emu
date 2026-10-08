@@ -6,6 +6,9 @@ import struct
 from dataclasses import dataclass
 from enum import IntEnum
 
+JOG_OPERATION = 4
+FADER_OPERATION = 5
+
 
 class ButtonOp(IntEnum):
     """Operations supported by the firmware control device."""
@@ -75,12 +78,12 @@ def serialize_event(event: ControllerEvent) -> bytes:
     if isinstance(event, ButtonEvent):
         return struct.pack("<iiiif", event.key, event.op, event.channel, event.value, event.analog)
     if isinstance(event, JogEvent):
-        # Jog ticks use op 4 with the tick count in value.
-        return struct.pack("<iiiif", event.key, 4, event.channel, event.delta, 0.0)
+        # Jog ticks use the named jog operation and store ticks in value.
+        return struct.pack("<iiiif", event.key, JOG_OPERATION, event.channel, event.delta, 0.0)
     if isinstance(event, FaderEvent):
-        # Faders/tempo use op 5 with the analog value in f32.
-        return struct.pack("<iiiif", event.key, 5, event.channel, event.value, event.analog)
+        # Faders and tempo use the named fader operation.
+        return struct.pack("<iiiif", event.key, FADER_OPERATION, event.channel, event.value, event.analog)
     if isinstance(event, EncoderEvent):
-        # Encoders are treated like jog ticks without analog output.
-        return struct.pack("<iiiif", event.key, 4, event.channel, event.delta, 0.0)
+        # Encoders use the jog operation without analog output.
+        return struct.pack("<iiiif", event.key, JOG_OPERATION, event.channel, event.delta, 0.0)
     raise TypeError(f"Unsupported event type: {type(event)}")

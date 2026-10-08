@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import struct
 import unittest
+from typing import Any, cast
 
 from controllers.events import (
     ButtonEvent,
@@ -49,7 +50,8 @@ class EventSerializationTest(unittest.TestCase):
             pass
 
         with self.assertRaises(TypeError):
-            serialize_event(UnknownEvent())  # type: ignore[arg-type]
+            # cast changes the static type without changing the runtime object.
+            serialize_event(cast("Any", UnknownEvent()))
 
 
 if __name__ == "__main__":

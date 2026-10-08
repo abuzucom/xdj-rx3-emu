@@ -19,6 +19,10 @@ from controllers.events import (
     JogEvent,
 )
 
+MIDI_CC_MAX = 127
+ENCODER_CENTER_VALUE = 64
+PITCH_BEND_CENTER = 0x2000
+
 
 @dataclass(frozen=True)
 class ButtonMapping:
@@ -76,16 +80,16 @@ class Profile:
         fader = self.faders.get(cc)
         if fader is not None:
             low, high = fader.analog_scale
-            analog = low + (value / 127.0) * (high - low)
+            analog = low + (value / float(MIDI_CC_MAX)) * (high - low)
             channel = fader.channel if fader.channel >= 0 else midi_channel
             return FaderEvent(key=fader.key.value, value=value, channel=channel, analog=analog)
         encoder = self.encoders.get(cc)
         if encoder is not None:
             # Treat values 64..127 as clockwise ticks, 63..1 as counter-clockwise.
-            if value == 0 or value == 64:
+            if value == 0 or value == ENCODER_CENTER_VALUE:
                 delta = 0
-            elif value > 64:
-                delta = value - 64
+            elif value > ENCODER_CENTER_VALUE:
+                delta = value - ENCODER_CENTER_VALUE
             else:
                 delta = value
             channel = encoder.channel if encoder.channel >= 0 else midi_channel
@@ -97,7 +101,7 @@ class Profile:
         if self.jog is None:
             return None
         # 14-bit signed value; convert to signed int.
-        signed = value - 0x2000
+        signed = value - PITCH_BEND_CENTER
         channel = self.jog.channel if self.jog.channel >= 0 else midi_channel
         return JogEvent(key=self.jog.key.value, delta=signed, channel=channel)
 

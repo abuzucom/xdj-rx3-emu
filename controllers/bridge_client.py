@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import socket
 import struct
+import logging
 import threading
 import time
 from typing import TYPE_CHECKING
@@ -20,6 +21,10 @@ class BridgeClient:
 
     FRAME_TYPE_KEY_COMMAND = 0x30
     CONNECT_TIMEOUT = 10.0
+    CONNECT_ATTEMPT_TIMEOUT_SECONDS = 2.0
+    CONNECT_RETRY_INTERVAL_SECONDS = 0.5
+    POLL_INTERVAL_SECONDS = 0.02
+    INBOUND_BUFFER_SIZE_BYTES = 4096
 
     def __init__(self, backend: ControllerBackend, host: str, port: int) -> None:
         self.backend = backend
@@ -50,7 +55,7 @@ class BridgeClient:
                 if event is not None:
                     self._send(event)
                 else:
-                    time.sleep(0.001)
+                    time.sleep(self.POLL_INTERVAL_SECONDS)
         finally:
             self.close()
 
@@ -95,16 +100,16 @@ class BridgeClient:
             if remaining <= 0:
                 break
             try:
-                return socket.create_connection((self.host, self.port), timeout=min(2.0, remaining))
-            except ConnectionRefusedError as exc:
+                return socket.create_connection(
+                    (self.host, self.port),
+                    timeout=min(self.CONNECT_ATTEMPT_TIMEOUT_SECONDS, remaining),
+                )
+            except OSError as exc:
                 last_error = exc
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     break
-                time.sleep(min(0.5, remaining))
-            except OSError as exc:
-                last_error = exc
-                break
+                time.sleep(min(self.CONNECT_RETRY_INTERVAL_SECONDS, remaining))
         raise RuntimeError(f"Could not connect to bridge at {self.host}:{self.port}") from last_error
 
     def _send(self, event: ControllerEvent) -> None:
@@ -125,12 +130,14 @@ class BridgeClient:
         try:
             while self._running.is_set():
                 try:
-                    data = sock.recv(4096)
+                    data = sock.recv(self.INBOUND_BUFFER_SIZE_BYTES)
                     if not data:
                         break
                 except TimeoutError:
+                    logging.debug("Bridge inbound frame read timed out")
                     continue
-                except OSError:
+                except OSError as exc:
+                    logging.debug("Bridge inbound socket read stopped: %s", type(exc).__name__)
                     break
         finally:
             self._running.clear()
