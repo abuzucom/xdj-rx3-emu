@@ -11,6 +11,7 @@ import time
 
 POLL_SECONDS = 0.1
 STOP_SECONDS = 2.0
+PROBE_TIMEOUT_SECONDS = 30.0
 
 
 def stop_children(children: list[subprocess.Popen]) -> None:
@@ -42,15 +43,22 @@ def supervise(commands: list[list[str]], watch_stdin: bool, timeout: float = 0, 
     deadline = time.monotonic() + timeout if timeout else float("inf")
     try:
         for command in commands:
-            children.append(
-                subprocess.Popen(
-                    command,
-                    start_new_session=True,
-                    stdin=subprocess.DEVNULL,
-                    stdout=log,
-                    stderr=subprocess.STDOUT if log is not None else None,
-                )
+            child = subprocess.Popen(
+                command,
+                start_new_session=True,
+                stdin=subprocess.DEVNULL,
+                stdout=log,
+                stderr=subprocess.STDOUT if log is not None else None,
             )
+            try:
+                group_id = os.getpgid(child.pid)
+                if group_id != child.pid:
+                    raise RuntimeError("RX3 child did not start in its own process group")
+            except (OSError, RuntimeError):
+                child.kill()
+                child.wait()
+                raise
+            children.append(child)
         print("SESSION READY", flush=True)
         while not stopped and time.monotonic() < deadline:
             for child in children:
@@ -78,7 +86,11 @@ def main() -> int:
     parser.add_argument("--probe", action="store_true")
     args = parser.parse_args()
     if args.probe:
-        return supervise([[sys.executable, "-c", "import time; time.sleep(30)"]], True, 30)
+        return supervise(
+            [[sys.executable, "-c", "import signal; signal.pause()"]],
+            True,
+            PROBE_TIMEOUT_SECONDS,
+        )
     import fcntl
     from rx3_guard import check_idle
 
@@ -89,7 +101,10 @@ def main() -> int:
         except BlockingIOError:
             print("ERROR: An RX3 session already owns the runtime. Close that window before retrying.")
             return 1
-        check_idle(int(os.environ.get("RX3_PORT", "4480")))
+        port_value = os.environ.get("RX3_PORT", "4480")
+        if not port_value.isdecimal():
+            raise ValueError("RX3_PORT must be an integer from 1024 to 65535.")
+        check_idle(int(port_value))
         command = ["bash", str(base / "run-rx3.sh"), "--owned-session"]
         return supervise([command], os.environ.get("RX3_WATCH_STDIN") == "1")
 

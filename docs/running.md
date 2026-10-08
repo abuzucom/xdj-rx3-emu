@@ -35,10 +35,14 @@ sudo apt-get update && sudo apt-get install -y python3 curl rsync qemu-user mtoo
 
 Keep the emulator console open during playback. Closing that window stops its
 player, bridge, and USB announcement helper. Startup checks for existing RX3
-processes and an occupied bridge port before changing runtime files. A warning
-reports leftover process IDs. Startup never terminates an existing session.
+processes, including zombie RX3 processes, and an occupied bridge port before
+changing runtime files. A warning reports leftover process IDs. Startup never terminates an existing session.
 Close the existing session before retrying. Failed sessions retain error output
 until Enter closes the console.
+
+The bootstrap preflight gives an early warning. The WSL supervisor repeats the
+process and port checks while holding the runtime lock before starting children.
+The bridge port must be between 1024 and 65535.
 
 Command-line switches shape the run:
 

@@ -5,6 +5,11 @@ set -u
 if [ "${1:-}" != "--owned-session" ]; then
   exec python3 "$HOME/rx3/rx3_session.py"
 fi
+RX3_PORT_VALUE=${RX3_PORT:-4480}
+if [[ ! "$RX3_PORT_VALUE" =~ ^[0-9]{1,5}$ ]] || (( 10#$RX3_PORT_VALUE < 1024 || 10#$RX3_PORT_VALUE > 65535 )); then
+  echo "ERROR: RX3_PORT must be an integer from 1024 to 65535." >&2
+  exit 2
+fi
 B=$HOME/rx3; R=$B/rootfs; LOG=$B/player.log
 [ -x $R/root/pdj/rbp-pi ] || { echo "rootfs not built: run build-rootfs-wsl.sh"; exit 1; }
 rm -f $R/tmp/rx3-master.raw $R/tmp/rx3-cue.raw $R/tmp/rx3-audio-peaks
@@ -30,7 +35,7 @@ fifo('udev_usbctn1', 'connect'); time.sleep(1.5); fifo('udev_usb1', 'mount /medi
 PY
 ) > $B/usb.log 2>&1 & fi
 if [ -z "${RX3_NOBRIDGE:-}" ]; then
-  python3 "$B/rx3_bridge.py" --root "$R" --port "${RX3_PORT:-4480}" &
+  python3 "$B/rx3_bridge.py" --root "$R" --port "$RX3_PORT_VALUE" &
   BRIDGE_PID=$!
   wait -n "$PLAYER_PID" "$BRIDGE_PID"
 else

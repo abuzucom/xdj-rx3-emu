@@ -409,6 +409,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     plan = build_phase_plan(options)
     runner = CommandRunner()
     if not options.check_only:
+        print("Checking for an existing RX3 session before bootstrap.")
         guard = (WSL_SOURCE_DIR / "rx3_guard.py").read_bytes()
         result = runner.run(["wsl.exe", "python3", "-"], input_bytes=guard)
         try:

@@ -6,6 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 One deviation applies. A version heading parenthesizes the release date.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.3] (2026-10-08)
+
+### Fixed
+- Validate the configured bridge port before startup and binding.
+- Detect RX3 zombies through their proc process name.
+- Confirm each supervised child owns its process group before cleanup.
+- Name the bounded lifecycle probe timeout.
+- Clarify that the runtime lock protects the final process and port checks.
+
 ## [0.8.2] (2026-10-08)
 
 ### Fixed

@@ -17,6 +17,7 @@ class LifecycleTest(unittest.TestCase):
             process = Path(folder) / "123"
             process.mkdir()
             (process / "cmdline").write_bytes(b"python3\0/tmp/rx3_bridge.py\0--port\04480\0")
+            (process / "comm").write_text("python3\n", encoding="utf-8")
             self.assertEqual(find_processes(Path(folder)), [123])
 
     def test_guard_reports_busy_port(self):
