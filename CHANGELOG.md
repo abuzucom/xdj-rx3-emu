@@ -6,6 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 One deviation applies. A version heading parenthesizes the release date.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.5] (2026-10-07)
+
+### Fixed
+- The controller CLI uses the shared named bridge port and documents its local loopback default.
+
 ## [0.6.4] (2026-10-07)
 
 ### Fixed

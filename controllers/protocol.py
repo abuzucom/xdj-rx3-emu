@@ -10,6 +10,7 @@ import time
 MAX_FRAME_LENGTH = 1_048_576
 FRAME_HEADER_SIZE = 5
 DEFAULT_READ_TIMEOUT_SECONDS = 5.0
+DEFAULT_BRIDGE_PORT = 4480
 
 
 def write_frame(sock: socket.socket, msg_type: int, payload: bytes) -> None:

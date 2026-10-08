@@ -8,14 +8,18 @@ import argparse
 from controllers.backends.midi import MidiBackend
 from controllers.bridge_client import BridgeClient
 from controllers.profiles import load_profile
+from controllers.protocol import DEFAULT_BRIDGE_PORT
+
+DEFAULT_BRIDGE_HOST = "127.0.0.1"
+# Local loopback keeps controller events on the local emulator by default.
 
 
 def main(argv: list[str] | None = None) -> int:
     """Parse arguments and run the selected controller backend."""
     parser = argparse.ArgumentParser(description="Forward MIDI/HID controller input to the XDJ-RX3 bridge.")
     parser.add_argument("--backend", choices=["midi"], default="midi", help="controller backend to use")
-    parser.add_argument("--bridge-host", default="127.0.0.1", help="emulator bridge host")
-    parser.add_argument("--bridge-port", type=int, default=4480, help="emulator bridge port")
+    parser.add_argument("--bridge-host", default=DEFAULT_BRIDGE_HOST, help="emulator bridge host")
+    parser.add_argument("--bridge-port", type=int, default=DEFAULT_BRIDGE_PORT, help="emulator bridge port")
     parser.add_argument(
         "--profile",
         default=None,
