@@ -127,9 +127,7 @@ class BridgeClient:
                 if remaining <= 0:
                     break
                 time.sleep(min(self.CONNECT_RETRY_INTERVAL_SECONDS, remaining))
-        raise BridgeConnectionError(
-            f"Could not connect to bridge at {self.host}:{self.port}"
-        ) from last_error
+        raise BridgeConnectionError(f"Could not connect to bridge at {self.host}:{self.port}") from last_error
 
     def _send(self, event: ControllerEvent) -> None:
         sock = self._sock
