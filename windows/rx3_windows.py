@@ -286,16 +286,30 @@ def sync_usb1_source(runner: CommandRunner, windows_source: str) -> None:
                 "set -e; "
                 f"src=$(readlink -f {shlex.quote(wsl_src)}); "
                 f"root=$(readlink -f {shlex.quote(wsl_root)}); "
-                'test -d "$src"; '
-                "[[ ${src,,} == ${root,,}/* ]]"
+                'test -d "$root" || { printf ROOT_MISSING >&2; exit 1; }; '
+                'test -d "$src" || { printf SRC_MISSING >&2; exit 1; }; '
+                '[[ "${src,,}" == "${root,,}"/* ]] || { printf OUTSIDE_ROOT >&2; exit 1; }'
             )
         )
     else:
         check = runner.run(wsl_script(f"test -d {shlex.quote(wsl_src)}"))
     if check.returncode != 0:
+        detail = check.stderr.decode(errors="replace").strip()
+        if "OUTSIDE_ROOT" in detail:
+            raise BootstrapError(
+                f"USB1 source folder {windows_source!r} is outside allowed root. Adjust RX3_USB1_ALLOWED_ROOT."
+            )
+        if "SRC_MISSING" in detail or allowed_root is None:
+            raise BootstrapError(
+                f"USB1 source folder does not exist in WSL or is outside allowed root: {windows_source!r}. "
+                "Create it and add music, or unset RX3_USB1_SOURCE / omit --usb1-source to skip this phase."
+            )
+        if "ROOT_MISSING" in detail:
+            raise BootstrapError(
+                f"USB1 allowed root {allowed_root!r} does not exist in WSL. Create it or unset RX3_USB1_ALLOWED_ROOT."
+            )
         raise BootstrapError(
-            f"USB1 source folder does not exist in WSL or is outside allowed root: {windows_source!r}. "
-            "Create it and add music, or unset RX3_USB1_SOURCE / omit --usb1-source to skip this phase."
+            f"USB1 source folder check failed for {windows_source!r}. Output: {detail[-ERROR_TAIL_BYTES:]}"
         )
     # shlex.quote is safe here because wsl_src is already in POSIX form.
     quoted_src = shlex.quote(wsl_src + "/")

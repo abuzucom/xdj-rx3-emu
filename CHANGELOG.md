@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 One deviation applies. A version heading parenthesizes the release date.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] (2026-10-07)
+
+### Fixed
+- `windows/rx3_windows.py` now reports distinct errors for a missing allowed root, a missing USB1 source folder, and a source folder outside the allowed root, instead of one conflated message.
+- `tests/test_rx3_windows.py` `FakeRunner` supports ordered `scripted` responses so multi-step WSL checks can be exercised deterministically.
+
 ## [0.5.0] (2026-10-07)
 
 ### Added
