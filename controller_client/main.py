@@ -32,6 +32,8 @@ def parse_controller_arguments(argv: list[str] | None = None) -> argparse.Namesp
         help="JSON profile path inside controllers/profiles",
     )
     parser.add_argument("--midi-port", default=None, help="MIDI input port name (default: first available)")
+    parser.add_argument("--midi-output", default=None, help="DJ2GO2 Touch LED output port name")
+    parser.add_argument("--no-led-feedback", action="store_true", help="disable controller LED output")
     return parser.parse_args(argv)
 
 
@@ -58,7 +60,12 @@ def main(argv: list[str] | None = None) -> int:
 
     profile = load_profile(args.profile)
     if args.backend == "midi":
-        backend: MidiBackend = MidiBackend(profile, port_name=args.midi_port)
+        backend: MidiBackend = MidiBackend(
+            profile,
+            port_name=args.midi_port,
+            output_name=args.midi_output,
+            led_feedback=not args.no_led_feedback,
+        )
     else:
         raise ValueError(f"Unsupported backend: {args.backend}")
 

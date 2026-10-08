@@ -4,6 +4,7 @@
 Same wire format as cdj3k_bridge.py: [type u8][len u32 LE][payload]
   bridge -> game  0x01 status text     0x10 screen info (w,h u16)   0x11 screen tile (x,y,w,h u16 + RGBA8888)
                   0x14 audio (rate u32, ch u8, s16le interleaved)   0x16 engine state text (from `query`)
+                  0x17 firmware LEDs (complete RXL1 snapshot)
   game -> bridge  0x30 key command  (key i32, op i32, channel i32, value i32, analog f32)   -> /dev/rx3-control
                   0x31 touch        (down u8, x u16, y u16 in 1280x800 screen pixels)       -> /dev/tsc2007_2-0048
                   0x32 usb event text ("mount usb1 </media/usb1/sda1>" ...)                  -> /proc/udev_* FIFOs
@@ -404,6 +405,8 @@ def serve(port, root, client):
 
 
 def main():
+    from led_relay import LedRelay
+
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default=os.path.expanduser("~/rx3/rootfs"))
     ap.add_argument("--port", type=int, default=4480)
@@ -411,7 +414,15 @@ def main():
     client = Client()
     threading.Thread(target=fb_thread, args=(os.path.join(a.root, CHROOT_FB), client), daemon=True).start()
     threading.Thread(target=audio_thread, args=(os.path.join(a.root, CHROOT_MASTER_AUDIO), client), daemon=True).start()
-    serve(a.port, a.root, client)
+    stopped = threading.Event()
+    relay = LedRelay(os.path.join(a.root, "tmp/rx3-leds"), client)
+    led_worker = threading.Thread(target=relay.run, args=(stopped,))
+    led_worker.start()
+    try:
+        serve(a.port, a.root, client)
+    finally:
+        stopped.set()
+        led_worker.join()
 
 
 if __name__ == "__main__":

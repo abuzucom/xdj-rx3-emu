@@ -204,8 +204,7 @@ class BridgeClient:
         sock = self._sock
         if sock is None:
             return
-        has_inbound_handlers = self.screen_buffer is not None or self.audio_sink is not None
-        decoder = FrameStreamDecoder() if has_inbound_handlers else None
+        decoder = FrameStreamDecoder()
         try:
             self._receive_inbound_frames(sock, decoder)
         finally:
@@ -238,6 +237,7 @@ class BridgeClient:
             # The length-prefixed protocol has no sync marker for safe recovery.
             self._running.clear()
             return
+        receiver = getattr(self.backend, "receive_feedback", None)
         for message_type, payload in frames:
             if message_type == self.FRAME_TYPE_AUDIO and self.audio_sink is not None:
                 try:
@@ -253,6 +253,12 @@ class BridgeClient:
                         "Windows audio buffer dropped %d stale bytes",
                         dropped_bytes,
                     )
+                continue
+            if message_type == 0x17 and receiver is not None:
+                try:
+                    receiver(payload)
+                except ValueError as exc:
+                    logging.warning("Bridge feedback frame rejected: %s", exc)
                 continue
             if self.screen_buffer is None:
                 continue

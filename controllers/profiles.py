@@ -31,6 +31,14 @@ class ButtonMapping:
 
     key: ControlKey
     channel: int = 0
+    midi_channel: int | None = None
+
+    def __post_init__(self) -> None:
+        """Reject invalid input channels before matching controller messages."""
+        if self.midi_channel is None:
+            return
+        if type(self.midi_channel) is not int or not 0 <= self.midi_channel <= 15:
+            raise ValueError("Button midi_channel must be an integer from 0 to 15")
 
 
 @dataclass(frozen=True)
@@ -71,6 +79,8 @@ class Profile:
         """Return a button press/release event for a MIDI note message."""
         mapping = self.buttons.get(note)
         if mapping is None:
+            return None
+        if mapping.midi_channel is not None and mapping.midi_channel != midi_channel:
             return None
         op = ButtonOp.PRESS if velocity > 0 else ButtonOp.RELEASE
         channel = mapping.channel if mapping.channel >= 0 else midi_channel
@@ -187,6 +197,7 @@ def load_profile(
         mapping = ButtonMapping(
             key=_normalize_key(raw.get("key")),
             channel=raw.get("channel", 0),
+            midi_channel=raw.get("midi_channel"),
         )
         buttons[int(note)] = mapping
     faders = {}

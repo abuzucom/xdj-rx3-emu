@@ -1,0 +1,8 @@
+"""Define the fixed RXL1 wire layout for desktop and standalone WSL use."""
+
+LED_HEADER_SIZE = 16
+LED_COUNT = 64
+LED_DECKS = 2
+LED_ENTRY_SIZE = 8
+LED_LEVELS_SIZE = 8
+LED_SNAPSHOT_SIZE = LED_HEADER_SIZE + LED_COUNT * LED_DECKS * LED_ENTRY_SIZE + LED_LEVELS_SIZE
