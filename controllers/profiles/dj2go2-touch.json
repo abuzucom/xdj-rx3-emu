@@ -1,0 +1,6 @@
+{
+  "name": "DJ2GO2 Touch",
+  "buttons": {
+    "0": {"key": "PLAY", "channel": 1, "midi_channel": 0}
+  }
+}
