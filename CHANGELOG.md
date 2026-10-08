@@ -6,6 +6,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 One deviation applies. A version heading parenthesizes the release date.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0-alpha.1] (2026-10-08)
+
+### Added
+- The DJ2GO2 Touch profile maps left Play/Pause to firmware deck 1.
+- Button profiles accept an optional MIDI input channel filter.
+- A validated RXL1 decoder provides firmware LED snapshot parsing.
+
 ## [0.7.5] (2026-10-08)
 
 ### Fixed
