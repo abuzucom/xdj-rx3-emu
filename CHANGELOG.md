@@ -6,6 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 One deviation applies. A version heading parenthesizes the release date.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.3] (2026-10-08)
+
+### Fixed
+- Relative encoder CC values below center now produce negative ticks.
+- The bridge client documents its blocking run loop, reports sends without a connected socket, and bounds reader-thread shutdown.
+- The MIDI backend reports clear device-open failures. The CLI closes the client in a `finally` block.
+- Encoder profiles reject unsupported `analog_scale` values.
+- Named the bridge read timeout and documented firmware operation-code constants.
+
 ## [0.6.2] (2026-10-08)
 
 ### Fixed

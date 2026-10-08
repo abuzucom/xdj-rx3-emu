@@ -31,6 +31,8 @@ def main(argv: list[str] | None = None) -> int:
         client.run()
     except KeyboardInterrupt:
         return 0
+    finally:
+        client.close()
     return 0
 
 

@@ -40,10 +40,17 @@ class MidiBackend(ControllerBackend):
             ) from _MIDI_ERROR
         self.profile = profile
         self._port: BaseInput | None
-        if port_name:
-            self._port = _MIDI.open_input(port_name)
-        else:
-            self._port = _MIDI.open_input()
+        try:
+            if port_name:
+                self._port = _MIDI.open_input(port_name)
+            else:
+                self._port = _MIDI.open_input()
+        except (ImportError, OSError, RuntimeError) as exc:
+            if port_name:
+                raise RuntimeError(
+                    f"Could not open MIDI input port {port_name!r}. Verify its name and device connection."
+                ) from exc
+            raise RuntimeError("Could not open a MIDI input port. Connect a device or pass --midi-port.") from exc
 
     def poll(self) -> ControllerEvent | None:
         """Return the next MIDI event mapped to a semantic event."""

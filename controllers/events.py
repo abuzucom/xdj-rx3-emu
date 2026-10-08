@@ -8,6 +8,7 @@ from enum import IntEnum
 
 JOG_OPERATION = 4
 FADER_OPERATION = 5
+# The firmware control adapter defines op 4 for jogs and op 5 for analog faders.
 
 
 class ButtonOp(IntEnum):

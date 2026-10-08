@@ -25,6 +25,7 @@ class BridgeClient:
     CONNECT_RETRY_INTERVAL_SECONDS = 0.5
     POLL_INTERVAL_SECONDS = 0.02
     INBOUND_BUFFER_SIZE_BYTES = 4096
+    READER_JOIN_TIMEOUT_SECONDS = 5.0
 
     def __init__(self, backend: ControllerBackend, host: str, port: int) -> None:
         self.backend = backend
@@ -37,7 +38,7 @@ class BridgeClient:
         self._close_lock = threading.Lock()
 
     def run(self) -> None:
-        """Run the forwarding loop until the backend is exhausted or an error occurs."""
+        """Block while forwarding events until close() or an error occurs."""
         try:
             if self._closed.is_set():
                 raise RuntimeError("Cannot run a closed bridge client")
@@ -75,7 +76,9 @@ class BridgeClient:
                 self._close_socket(sock)
             reader = self._reader
             if reader is not None and reader is not threading.current_thread():
-                reader.join()
+                reader.join(timeout=self.READER_JOIN_TIMEOUT_SECONDS)
+                if reader.is_alive():
+                    logging.warning("Bridge reader thread did not stop after socket shutdown")
 
     @staticmethod
     def _close_socket(sock: socket.socket) -> None:
@@ -115,7 +118,7 @@ class BridgeClient:
     def _send(self, event: ControllerEvent) -> None:
         sock = self._sock
         if sock is None:
-            return
+            raise RuntimeError("Bridge socket is not connected. Call run() before sending controller events.")
         payload = serialize_event(event)
         try:
             write_frame(sock, self.FRAME_TYPE_KEY_COMMAND, payload)

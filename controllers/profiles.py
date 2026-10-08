@@ -86,12 +86,9 @@ class Profile:
         encoder = self.encoders.get(cc)
         if encoder is not None:
             # Treat values 64..127 as clockwise ticks, 63..1 as counter-clockwise.
-            if value == 0 or value == ENCODER_CENTER_VALUE:
+            delta = value - ENCODER_CENTER_VALUE
+            if value == 0:
                 delta = 0
-            elif value > ENCODER_CENTER_VALUE:
-                delta = value - ENCODER_CENTER_VALUE
-            else:
-                delta = value
             channel = encoder.channel if encoder.channel >= 0 else midi_channel
             return EncoderEvent(key=encoder.key.value, delta=delta, channel=channel)
         return None
@@ -173,6 +170,8 @@ def load_profile(path: str | Path | None = None) -> Profile:
         )
     encoders = {}
     for cc, raw in data.get("encoders", {}).items():
+        if "analog_scale" in raw:
+            raise ValueError(f"Encoder CC {cc} does not support analog_scale")
         encoders[int(cc)] = ContinuousMapping(
             key=_normalize_key(raw.get("key")),
             channel=raw.get("channel", 0),

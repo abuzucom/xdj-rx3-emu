@@ -9,6 +9,7 @@ import time
 
 MAX_FRAME_LENGTH = 1_048_576
 FRAME_HEADER_SIZE = 5
+DEFAULT_READ_TIMEOUT_SECONDS = 5.0
 
 
 def write_frame(sock: socket.socket, msg_type: int, payload: bytes) -> None:
@@ -30,7 +31,7 @@ def _apply_read_deadline(sock: socket.socket, deadline: float | None) -> None:
 def read_frame(
     sock: socket.socket,
     max_length: int = MAX_FRAME_LENGTH,
-    timeout: float | None = 5.0,
+    timeout: float | None = DEFAULT_READ_TIMEOUT_SECONDS,
 ) -> tuple[int, bytes] | None:
     """Read one frame, returning None for EOF or an oversized frame."""
     deadline = time.monotonic() + timeout if timeout is not None else None
