@@ -28,7 +28,7 @@ jobs:
     steps:
       - name: Resolve pull request from workflow run head
         id: resolve
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const workflowRun = context.payload.workflow_run;
@@ -102,7 +102,7 @@ jobs:
   review:
     needs: resolve-pr
     if: needs.resolve-pr.result == 'success' && needs.resolve-pr.outputs.same_repository == 'true' && needs.resolve-pr.outputs.already_reviewed != 'true'
-    uses: abuzucom/foucault/.github/workflows/security-review.yml@62851df1ef177593adbb9e06b223f5a6dce66fc0
+    uses: abuzucom/foucault/.github/workflows/security-review.yml@f58255c8d75658e62e7cff9b607c13aeab5f5e18
     with:
       # Foucault 3.3.10 policy revision.
       audit_ref: "62851df1ef177593adbb9e06b223f5a6dce66fc0"
